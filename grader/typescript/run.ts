@@ -3,12 +3,14 @@ import { visibleCases as q1Visible } from "../../tests/typescript/q1.visible.js"
 import { hiddenCases as q1Hidden } from "../../tests/typescript/q1.hidden.js";
 import { visibleCases as q2Visible } from "../../tests/typescript/q2.visible.js";
 import { hiddenCases as q2Hidden } from "../../tests/typescript/q2.hidden.js";
+import { visibleCases as q3Visible } from "../../tests/typescript/q3.visible.js";
+import { hiddenCases as q3Hidden } from "../../tests/typescript/q3.hidden.js";
 
 const [question, mode = "visible", rawMaxLevel = "4"] = process.argv.slice(2);
 const maxLevel = Number(rawMaxLevel);
 
-if (!new Set(["q1", "q2"]).has(question ?? "")) {
-  console.error("Questão inválida. Use q1 ou q2.");
+if (!new Set(["q1", "q2", "q3"]).has(question ?? "")) {
+  console.error("Questão inválida. Use q1, q2 ou q3.");
   process.exit(2);
 }
 if (!new Set(["visible", "grade"]).has(mode)) {
@@ -20,12 +22,14 @@ if (!Number.isInteger(maxLevel) || maxLevel < 1 || maxLevel > 4) {
   process.exit(2);
 }
 
-const selectedQuestion = question as "q1" | "q2";
+const selectedQuestion = question as "q1" | "q2" | "q3";
 let cases: TestCase[];
 if (selectedQuestion === "q1") {
   cases = mode === "grade" ? [...q1Visible, ...q1Hidden] : q1Visible;
-} else {
+} else if (selectedQuestion === "q2") {
   cases = mode === "grade" ? [...q2Visible, ...q2Hidden] : q2Visible;
+} else {
+  cases = mode === "grade" ? [...q3Visible, ...q3Hidden] : q3Visible;
 }
 
 cases = cases.filter((test) => test.level <= maxLevel);

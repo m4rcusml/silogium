@@ -11,6 +11,7 @@
   },
   "include": [
     "solutions/typescript/**/*.ts",
+    "reference-solutions/typescript/**/*.ts",
     "grader/typescript/**/*.ts",
     "tests/typescript/**/*.ts"
   ]

@@ -9,7 +9,7 @@ const question = rawQuestion?.toLowerCase();
 const language = rawLanguage?.toLowerCase();
 const level = rawLevel ?? "4";
 
-const validQuestions = new Set(["q1", "q2"]);
+const validQuestions = new Set(["q1", "q2", "q3"]);
 const validLanguages = new Set(["ts", "py"]);
 
 function usage(exitCode = 0) {
@@ -21,7 +21,7 @@ Uso:
   npm run assessment -- submit q1 ts
   npm run assessment -- open   q1 ts
 
-Questões: q1, q2 | Linguagens: ts, py | Níveis: 1 a 4
+Questões: q1, q2, q3 | Linguagens: ts, py | Níveis: 1 a 4
 `);
   process.exit(exitCode);
 }
@@ -33,15 +33,18 @@ const sessionsDir = join(root, ".sessions");
 const sessionPath = join(sessionsDir, `${question}-${language}.json`);
 
 function questionDir() {
-  return question === "q1"
-    ? join(root, "questions", "q1_parcel_network")
-    : join(root, "questions", "q2_room_reservations");
+  const folders = {
+    q1: "q1_parcel_network",
+    q2: "q2_room_reservations",
+    q3: "q3_build_farm"
+  };
+  return join(root, "questions", folders[question]);
 }
 
 function solutionPath() {
   const folder = language === "ts" ? "typescript" : "python";
   const extension = language === "ts" ? "ts" : "py";
-  const number = question === "q1" ? "1" : "2";
+  const number = question.slice(1);
   return join(root, "solutions", folder, `question${number}.${extension}`);
 }
 

@@ -12,10 +12,14 @@
     "grade:q1:ts": "tsx grader/typescript/run.ts q1 grade 4",
     "test:q2:ts": "tsx grader/typescript/run.ts q2 visible",
     "grade:q2:ts": "tsx grader/typescript/run.ts q2 grade 4",
+    "test:q3:ts": "tsx grader/typescript/run.ts q3 visible",
+    "grade:q3:ts": "tsx grader/typescript/run.ts q3 grade 4",
     "test:q1:py": "python grader/python/run.py q1 visible",
     "grade:q1:py": "python grader/python/run.py q1 grade 4",
     "test:q2:py": "python grader/python/run.py q2 visible",
-    "grade:q2:py": "python grader/python/run.py q2 grade 4"
+    "grade:q2:py": "python grader/python/run.py q2 grade 4",
+    "test:q3:py": "python grader/python/run.py q3 visible",
+    "grade:q3:py": "python grader/python/run.py q3 grade 4"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

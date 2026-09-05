@@ -52,14 +52,14 @@ def run_cases(cases: list[TestCase], title: str) -> int:
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("Uso: python grader/python/run.py q1|q2 visible|grade [1-4]")
+        print("Uso: python grader/python/run.py q1|q2|q3 visible|grade [1-4]")
         return 2
 
     question = sys.argv[1]
     mode = sys.argv[2] if len(sys.argv) > 2 else "visible"
     max_level = int(sys.argv[3]) if len(sys.argv) > 3 else 4
 
-    if question not in {"q1", "q2"} or mode not in {"visible", "grade"}:
+    if question not in {"q1", "q2", "q3"} or mode not in {"visible", "grade"}:
         print("Questão ou modo inválido.")
         return 2
     if max_level not in {1, 2, 3, 4}:
