@@ -1,0 +1,17 @@
+{
+  "name": "@silogium/cli",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "bin": { "silogium": "dist/index.js" },
+  "exports": "./dist/index.js",
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@silogium/core": "0.2.0",
+    "@silogium/judge": "0.2.0"
+  },
+  "devDependencies": { "tsup": "^8.5.0" }
+}

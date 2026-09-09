@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "problemId": "9b3bf8eb-c1b2-4a0b-a092-b14983e50f0e",
+  "problemVersion": 1,
+  "visibleCases": [
+    {
+      "kind": "call-sequence", "id": "q2-l1-intervalos", "name": "reserva intervalos semiabertos", "stage": 1, "constructorArgs": [],
+      "calls": [
+        { "method": "addRoom", "args": ["R1", 4], "expected": true },
+        { "method": "book", "args": [1, "b1", "R1", "u1", 10, 20, 3], "expected": true },
+        { "method": "book", "args": [2, "b2", "R1", "u2", 15, 25, 2], "expected": false },
+        { "method": "book", "args": [3, "b3", "R1", "u2", 20, 25, 2], "expected": true },
+        { "method": "roomSchedule", "args": [4, "R1"], "expected": ["b1:10-20", "b3:20-25"] }
+      ]
+    },
+    {
+      "kind": "call-sequence", "id": "q2-l2-ranking", "name": "ordena salas e usuários", "stage": 2, "constructorArgs": [],
+      "calls": [
+        { "method": "addRoom", "args": ["B", 4], "expected": true },
+        { "method": "addRoom", "args": ["A", 4], "expected": true },
+        { "method": "book", "args": [1, "a1", "A", "ana", 0, 30, 1], "expected": true },
+        { "method": "availableRooms", "args": [2, 30, 40, 3], "expected": ["A", "B"] },
+        { "method": "topUsers", "args": [3, 2], "expected": ["ana(30)"] }
+      ]
+    },
+    {
+      "kind": "call-sequence", "id": "q2-l3-fila", "name": "promove solicitações em espera", "stage": 3, "constructorArgs": [],
+      "calls": [
+        { "method": "addRoom", "args": ["R", 4], "expected": true },
+        { "method": "book", "args": [1, "base", "R", "owner", 10, 20, 2], "expected": true },
+        { "method": "joinWaitlist", "args": [2, "w1", "R", "ana", 10, 15, 2], "expected": true },
+        { "method": "getWaitlist", "args": [3, "R"], "expected": ["w1"] },
+        { "method": "cancel", "args": [4, "base"], "expected": true },
+        { "method": "roomSchedule", "args": [5, "R"], "expected": ["w1:10-15"] }
+      ]
+    },
+    {
+      "kind": "call-sequence", "id": "q2-l4-serie", "name": "cria e cancela série atômica", "stage": 4, "constructorArgs": [],
+      "calls": [
+        { "method": "addRoom", "args": ["R", 5], "expected": true },
+        { "method": "bookSeries", "args": [1, "daily", "R", "u", [30, 10, 20], 5, 2], "expected": true },
+        { "method": "roomSchedule", "args": [2, "R"], "expected": ["daily#2:10-15", "daily#3:20-25", "daily#1:30-35"] },
+        { "method": "cancelSeries", "args": [3, "daily"], "expected": 3 },
+        { "method": "roomSchedule", "args": [4, "R"], "expected": [] }
+      ]
+    }
+  ],
+  "hiddenCases": [],
+  "referenceSolutions": {}
+}

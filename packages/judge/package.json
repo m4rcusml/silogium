@@ -1,0 +1,9 @@
+{
+  "name": "@silogium/judge",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "dependencies": { "@silogium/core": "0.2.0", "esbuild": "^0.25.0" }
+}

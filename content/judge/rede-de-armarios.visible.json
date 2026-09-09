@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "problemId": "291778f3-bd92-4e37-b9c8-f2df87025d63",
+  "problemVersion": 1,
+  "visibleCases": [
+    {
+      "kind": "call-sequence",
+      "id": "q1-l1-capacidade",
+      "name": "armazena, respeita capacidade e coleta",
+      "stage": 1,
+      "constructorArgs": [],
+      "calls": [
+        { "method": "addLocker", "args": ["A", 10], "expected": true },
+        { "method": "storeParcel", "args": [1, "p1", "A", 6], "expected": true },
+        { "method": "storeParcel", "args": [2, "p2", "A", 5], "expected": false },
+        { "method": "getLoad", "args": [3, "A"], "expected": 6 },
+        { "method": "collectParcel", "args": [4, "p1"], "expected": true },
+        { "method": "getLoad", "args": [5, "A"], "expected": 0 }
+      ]
+    },
+    {
+      "kind": "call-sequence",
+      "id": "q1-l2-atividade",
+      "name": "movimenta e ordena atividade",
+      "stage": 2,
+      "constructorArgs": [],
+      "calls": [
+        { "method": "addLocker", "args": ["A", 10], "expected": true },
+        { "method": "addLocker", "args": ["B", 10], "expected": true },
+        { "method": "storeParcel", "args": [1, "p1", "A", 4], "expected": true },
+        { "method": "moveParcel", "args": [2, "p1", "B"], "expected": true },
+        { "method": "collectParcel", "args": [3, "p1"], "expected": true },
+        { "method": "topLockers", "args": [4, 2], "expected": ["A(8)", "B(8)"] }
+      ]
+    },
+    {
+      "kind": "call-sequence",
+      "id": "q1-l3-agendamento",
+      "name": "agenda e processa uma movimentação",
+      "stage": 3,
+      "constructorArgs": [],
+      "calls": [
+        { "method": "addLocker", "args": ["A", 10], "expected": true },
+        { "method": "addLocker", "args": ["B", 10], "expected": true },
+        { "method": "storeParcel", "args": [1, "p", "A", 3], "expected": true },
+        { "method": "scheduleMove", "args": [2, "p", "B", 8], "expected": "move-1" },
+        { "method": "processScheduled", "args": [7], "expected": [] },
+        { "method": "processScheduled", "args": [8], "expected": ["move-1"] },
+        { "method": "getLoad", "args": [9, "B"], "expected": 3 }
+      ]
+    },
+    {
+      "kind": "call-sequence",
+      "id": "q1-l4-fusao",
+      "name": "funde armários e preserva histórico",
+      "stage": 4,
+      "constructorArgs": [],
+      "calls": [
+        { "method": "addLocker", "args": ["A", 10], "expected": true },
+        { "method": "addLocker", "args": ["B", 10], "expected": true },
+        { "method": "storeParcel", "args": [1, "p", "A", 4], "expected": true },
+        { "method": "mergeLockers", "args": [2, "A", "B"], "expected": true },
+        { "method": "getLoad", "args": [3, "A"], "expected": null },
+        { "method": "getParcelHistory", "args": [4, "p"], "expected": ["stored:A@1", "merged:A->B@2"] }
+      ]
+    }
+  ],
+  "hiddenCases": [],
+  "referenceSolutions": {}
+}

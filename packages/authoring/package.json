@@ -1,0 +1,13 @@
+{
+  "name": "@silogium/authoring",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "dependencies": {
+    "@silogium/core": "0.2.0",
+    "openai": "^5.20.0",
+    "zod": "^4.1.0"
+  }
+}

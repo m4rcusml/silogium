@@ -1,0 +1,17 @@
+project_id = "silogium"
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+
+[db]
+major_version = 15
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+
+[studio]
+enabled = true

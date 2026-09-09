@@ -1,13 +1,28 @@
 {
   "name": "silogium",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Plataforma para praticar, submeter e avaliar soluções de problemas de programação.",
+  "description": "Plataforma para descobrir, resolver e avaliar problemas de programação.",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "assessment": "node scripts/assessment.mjs",
     "open": "code .",
-    "typecheck": "tsc --noEmit",
+    "content:generate": "node scripts/generate-content.mjs",
+    "db:seed": "npm run content:generate && node scripts/seed-supabase.mjs",
+    "test:private-references": "node scripts/verify-private-references.mjs",
+    "test:private-bundles": "npm run content:generate && tsx scripts/verify-private-bundles.ts",
+    "dev": "npm run dev --workspace @silogium/web",
+    "build": "npm run content:generate && npm run build --workspaces --if-present",
+    "test": "npm run content:generate && vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:db": "npx supabase test db",
+    "typecheck": "npm run content:generate && npm run typecheck --workspaces --if-present",
+    "cli": "tsx packages/cli/src/index.ts",
     "test:q1:ts": "tsx grader/typescript/run.ts q1 visible",
     "grade:q1:ts": "tsx grader/typescript/run.ts q1 grade 4",
     "test:q2:ts": "tsx grader/typescript/run.ts q2 visible",
@@ -22,8 +37,10 @@
     "grade:q3:py": "python grader/python/run.py q3 grade 4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@types/node": "^22.15.0",
     "tsx": "^4.20.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^5.0.0"
   }
 }

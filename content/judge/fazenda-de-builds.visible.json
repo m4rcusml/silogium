@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "problemId": "fbb9e49b-572b-412d-8690-50c78e57f9a9",
+  "problemVersion": 1,
+  "visibleCases": [
+    {
+      "kind": "call-sequence", "id": "q3-l1-capacidade", "name": "submete e conclui jobs", "stage": 1, "constructorArgs": [],
+      "calls": [
+        { "method": "addWorker", "args": ["w1", 10], "expected": true },
+        { "method": "submitJob", "args": [1, "a", "w1", 6], "expected": true },
+        { "method": "submitJob", "args": [2, "b", "w1", 5], "expected": false },
+        { "method": "getWorkerLoad", "args": [3, "w1"], "expected": 6 },
+        { "method": "completeJob", "args": [4, "a"], "expected": true }
+      ]
+    },
+    {
+      "kind": "call-sequence", "id": "q3-l2-transferencia", "name": "transfere e credita trabalho", "stage": 2, "constructorArgs": [],
+      "calls": [
+        { "method": "addWorker", "args": ["a", 10], "expected": true },
+        { "method": "addWorker", "args": ["b", 10], "expected": true },
+        { "method": "submitJob", "args": [1, "j", "a", 4], "expected": true },
+        { "method": "transferJob", "args": [2, "j", "b"], "expected": true },
+        { "method": "completeJob", "args": [3, "j"], "expected": true },
+        { "method": "topWorkers", "args": [4, 2], "expected": ["b(4)", "a(0)"] }
+      ]
+    },
+    {
+      "kind": "call-sequence", "id": "q3-l3-dependencias", "name": "bloqueia job por dependência", "stage": 3, "constructorArgs": [],
+      "calls": [
+        { "method": "addWorker", "args": ["w", 20], "expected": true },
+        { "method": "submitJob", "args": [1, "base", "w", 3], "expected": true },
+        { "method": "submitJob", "args": [2, "app", "w", 5], "expected": true },
+        { "method": "addDependency", "args": [3, "app", "base"], "expected": true },
+        { "method": "readyJobs", "args": [4, "w"], "expected": ["base"] },
+        { "method": "completeJob", "args": [5, "app"], "expected": false },
+        { "method": "completeJob", "args": [6, "base"], "expected": true },
+        { "method": "readyJobs", "args": [7, "w"], "expected": ["app"] }
+      ]
+    },
+    {
+      "kind": "call-sequence", "id": "q3-l4-drenagem", "name": "drena worker de forma atômica", "stage": 4, "constructorArgs": [],
+      "calls": [
+        { "method": "addWorker", "args": ["source", 20], "expected": true },
+        { "method": "addWorker", "args": ["a", 5], "expected": true },
+        { "method": "addWorker", "args": ["b", 8], "expected": true },
+        { "method": "submitJob", "args": [1, "j1", "source", 5], "expected": true },
+        { "method": "submitJob", "args": [2, "j2", "source", 4], "expected": true },
+        { "method": "drainWorker", "args": [3, "source", ["a", "b"]], "expected": true },
+        { "method": "getWorkerLoad", "args": [4, "source"], "expected": null },
+        { "method": "getJobHistory", "args": [5, "j1"], "expected": ["submitted:source@1", "drained:source->b@3"] }
+      ]
+    }
+  ],
+  "hiddenCases": [],
+  "referenceSolutions": {}
+}

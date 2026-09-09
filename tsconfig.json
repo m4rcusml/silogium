@@ -1,11 +1,13 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "esModuleInterop": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "noEmit": true
   },
@@ -13,6 +15,8 @@
     "solutions/typescript/**/*.ts",
     "reference-solutions/typescript/**/*.ts",
     "grader/typescript/**/*.ts",
-    "tests/typescript/**/*.ts"
-  ]
+    "tests/typescript/**/*.ts",
+    "packages/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next", "dist"]
 }

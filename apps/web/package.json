@@ -1,0 +1,28 @@
+{
+  "name": "@silogium/web",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@silogium/authoring": "0.2.0",
+    "@silogium/core": "0.2.0",
+    "@silogium/judge": "0.2.0",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.57.0",
+    "lucide-react": "^0.544.0",
+    "next": "^16.3.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0"
+  }
+}
