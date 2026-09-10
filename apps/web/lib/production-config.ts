@@ -1,7 +1,7 @@
 import { validatePublicSupabaseConfig } from "./supabase/public-config";
 
 /** Deployment previews also have external visitors; they must never enable demo auth. */
-export function isHostedProduction(environment: NodeJS.ProcessEnv = process.env): boolean {
+export function isHostedProduction(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
   return environment.NODE_ENV === "production" || environment.VERCEL_ENV === "production" || environment.VERCEL_ENV === "preview";
 }
 
@@ -19,7 +19,7 @@ export class ProductionConfigurationError extends Error {
  * The web can operate without AI configuration; provider/worker policy is separate.
  * Call before auth (including CLI tokens), database access, and cached adapters.
  */
-export function assertProductionServerConfig(environment: NodeJS.ProcessEnv = process.env): void {
+export function assertProductionServerConfig(environment: Readonly<Record<string, string | undefined>> = process.env): void {
   if (!isHostedProduction(environment)) return;
   const url = environment.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const publicKey = environment.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();

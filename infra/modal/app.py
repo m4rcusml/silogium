@@ -1,287 +1,156 @@
-"""Judge remoto do Silogium.
+"""Authenticated Modal judge v2. Deploy with: modal deploy -m infra.modal.app.
 
-Deploy:
-  modal secret create silogium-judge-token AUTH_TOKEN=<segredo-forte>
-  modal deploy infra/modal/app.py
+Only this trusted controller receives expected values. Candidate sandboxes are
+fresh per case, contain no controller/payload/references, and return raw values.
 """
-
 from __future__ import annotations
 
+import asyncio
 import hmac
-import json
+import math
 import os
-import textwrap
-import time
-import uuid
 
 import fastapi
 import modal
 
-app = modal.App("silogium-judge")
-
-controller_image = modal.Image.debian_slim(python_version="3.13").uv_pip_install(
-    "fastapi[standard]==0.139.2"
+from infra.modal.candidate_runtime import candidate_files
+from infra.modal.controller import (
+    CandidateCase, CandidateFailure, MAX_PAYLOAD_BYTES, PROTOCOL_VERSION,
+    ProcessOutput, evaluate_payload, parse_json,
 )
+
+app = modal.App("silogium-judge")
+controller_image = (
+    modal.Image.debian_slim(python_version="3.13")
+    .uv_pip_install("fastapi[standard]==0.139.2")
+    .add_local_python_source("infra.modal")
+)
+# These images are independent from controller_image. Never mount source trees,
+# secrets, volumes, snapshots of used sandboxes, or the controller image here.
 typescript_image = (
     modal.Image.from_registry("node:22.22.0-bookworm-slim")
-    .apt_install("python3")
     .run_commands("npm install --global esbuild@0.25.12")
 )
 python_image = modal.Image.from_registry("python:3.13.11-slim")
 
-RUNNER = r'''
-import json, pathlib, subprocess, sys, time
 
-payload = json.loads(pathlib.Path("/work/payload.json").read_text())
-problem, bundle, request = payload["problem"], payload["bundle"], payload["request"]
-runtime = next(item for item in problem["runtimes"] if item["language"] == request["runtime"])
-cases = bundle["visibleCases"] if request["kind"] == "run" else bundle["visibleCases"] + bundle["hiddenCases"]
-if request.get("maxStage"):
-    cases = [case for case in cases if case["stage"] <= request["maxStage"]]
+async def collect_output(process, *, output_bytes, timeout_seconds):
+    """Read both byte streams concurrently, stopping before retaining >limit.
 
-limit_ms = int(problem["limits"]["timeMs"])
-output_limit = int(problem["limits"]["outputBytes"])
-started = time.monotonic()
+    Never use StreamReader.read(): it buffers arbitrary candidate output until EOF.
+    The owning executor terminates the whole sandbox on ANY exit from this function.
+    """
+    buffers = [bytearray(), bytearray()]
+    size = 0
 
-def failure(verdict, message):
-    return {"verdict": verdict, "score": 0, "maxScore": 0, "cases": [], "message": message}
+    async def read(stream, destination):
+        nonlocal size
+        async for chunk in stream:
+            if not isinstance(chunk, bytes):
+                raise RuntimeError("Leitura do sandbox não está em modo binário")
+            size += len(chunk)
+            if size > output_bytes:
+                raise CandidateFailure("output_limit", "Limite de saída excedido.")
+            destination.extend(chunk)
 
-def execute(command, stdin="", timeout_ms=limit_ms):
+    async def send_eof():
+        process.stdin.write_eof()
+        await process.stdin.drain.aio()
+
+    readers = [asyncio.create_task(read(process.stdout, buffers[0])),
+               asyncio.create_task(read(process.stderr, buffers[1])),
+               asyncio.create_task(process.wait.aio()), asyncio.create_task(send_eof())]
     try:
-        completed = subprocess.run(command, input=stdin, text=True, capture_output=True, timeout=timeout_ms / 1000)
-    except subprocess.TimeoutExpired:
-        return None, "time_limit", "Tempo limite excedido."
-    output_size = len(completed.stdout.encode()) + len(completed.stderr.encode())
-    if output_size > output_limit:
-        return None, "output_limit", "Limite de saída excedido."
-    if completed.returncode != 0:
-        stderr = completed.stderr[-2000:] or "A execução falhou."
-        if completed.returncode in (-9, 137):
-            return None, "memory_limit", "Limite de memória excedido."
-        compile_markers = ("SyntaxError", "TSError", "TS", "Cannot find module", "não encontrado")
-        verdict = "compile_error" if any(marker in stderr for marker in compile_markers) else "runtime_error"
-        return None, verdict, stderr
-    return completed.stdout, None, None
-
-outcomes = []
-if request["runtime"] == "typescript":
-    try:
-        compilation = subprocess.run(
-            ["esbuild", "/work/solution.ts", "--format=esm", "--platform=node", "--target=node22", "--outfile=/work/solution.mjs"],
-            text=True, capture_output=True, timeout=10
-        )
-    except subprocess.TimeoutExpired:
-        print(json.dumps(failure("system_error", "O compilador excedeu o tempo de inicialização.")))
-        raise SystemExit
-    if compilation.returncode != 0:
-        print(json.dumps(failure("compile_error", compilation.stderr[-2000:] or "Falha ao compilar TypeScript.")))
-        raise SystemExit
-
-if problem["executionModel"] == "stdio":
-    command = ["node", "/work/solution.mjs"] if request["runtime"] == "typescript" else ["python", "/work/solution.py"]
-    for case in cases:
-        output, verdict, message = execute(command, case["stdin"])
-        if verdict:
-            print(json.dumps(failure(verdict, message)))
-            raise SystemExit
-        passed = output.rstrip().replace("\r\n", "\n") == case["expectedStdout"].rstrip().replace("\r\n", "\n")
-        outcomes.append({"id": case["id"], "name": case["name"], "stage": case["stage"], "passed": passed, **({} if passed else {"message": "Saída incorreta.", "mismatch": {"expected": case["expectedStdout"], "actual": output, "input": case["stdin"]}})})
-else:
-    wrapper = "/work/call_runner.mjs" if request["runtime"] == "typescript" else "/work/call_runner.py"
-    command = ["node", wrapper] if request["runtime"] == "typescript" else ["python", wrapper]
-    output, verdict, message = execute(command, timeout_ms=min(30000, max(limit_ms, limit_ms * len(cases))))
-    if verdict:
-        print(json.dumps(failure(verdict, message)))
-        raise SystemExit
-    try:
-        outcomes = json.loads(output)
-    except Exception:
-        print(json.dumps(failure("runtime_error", "O runner devolveu uma saída inválida.")))
-        raise SystemExit
-
-hidden_ids = {case["id"] for case in bundle["hiddenCases"]}
-if request["kind"] == "submission":
-    for outcome in outcomes:
-        if outcome["id"] in hidden_ids:
-            outcome["name"] = "Teste oculto"
-            outcome.pop("message", None)
-            outcome.pop("mismatch", None)
-
-score = 0
-max_score = 0
-for stage in problem["stages"]:
-    stage_cases = [case for case in outcomes if case["stage"] == stage["number"]]
-    if not stage_cases:
-        continue
-    max_score += stage["points"]
-    score += round(stage["points"] * sum(1 for case in stage_cases if case["passed"]) / len(stage_cases))
-
-print(json.dumps({
-    "verdict": "accepted" if all(case["passed"] for case in outcomes) else "wrong_answer",
-    "score": score,
-    "maxScore": max_score,
-    "cases": outcomes,
-    "durationMs": round((time.monotonic() - started) * 1000),
-}))
-'''
-
-TS_CALL_RUNNER = r'''
-import { pathToFileURL } from "node:url";
-import { readFileSync } from "node:fs";
-const payload = JSON.parse(readFileSync("/work/payload.json", "utf8"));
-const runtime = payload.problem.runtimes.find((item) => item.language === payload.request.runtime);
-const cases = (payload.request.kind === "run" ? payload.bundle.visibleCases : [...payload.bundle.visibleCases, ...payload.bundle.hiddenCases]).filter((item) => !payload.request.maxStage || item.stage <= payload.request.maxStage);
-const imported = await import(pathToFileURL("/work/solution.mjs").href + "?v=" + Date.now());
-const Constructor = imported[runtime.entrypoint.symbol];
-if (typeof Constructor !== "function") throw new Error("Símbolo exportado não encontrado: " + runtime.entrypoint.symbol);
-const outcomes = [];
-const jsonValue = (value) => { try { return JSON.parse(JSON.stringify(value) ?? '"[undefined]"'); } catch { return String(value); } };
-for (const test of cases) {
-  let mismatch;
-  try {
-    const instance = new Constructor(...test.constructorArgs);
-    for (const call of test.calls) {
-      const methodName = runtime.entrypoint.methodMap[call.method] || call.method;
-      const input = jsonValue(call.args);
-      const actual = await instance[methodName](...call.args);
-      if (JSON.stringify(actual) !== JSON.stringify(call.expected)) {
-        mismatch = { expected: jsonValue(call.expected), actual: jsonValue(actual), method: call.method, input };
-        throw new Error("Resultado incorreto em " + methodName);
-      }
-    }
-    outcomes.push({ id: test.id, name: test.name, stage: test.stage, passed: true });
-  } catch (error) {
-    outcomes.push({ id: test.id, name: test.name, stage: test.stage, passed: false, message: error instanceof Error ? error.message : String(error), ...(mismatch ? { mismatch } : {}) });
-  }
-}
-let remaining = Math.max(0, payload.problem.limits.outputBytes - Buffer.byteLength(JSON.stringify(outcomes.map(({ mismatch, ...outcome }) => outcome))) - 1);
-for (const outcome of outcomes) {
-  const mismatch = outcome.mismatch;
-  delete outcome.mismatch;
-  if (!mismatch) continue;
-  if (mismatch.input !== undefined && Buffer.byteLength(JSON.stringify(mismatch.input)) > 2048) delete mismatch.input;
-  const addedBytes = Buffer.byteLength(JSON.stringify({ ...outcome, mismatch })) - Buffer.byteLength(JSON.stringify(outcome));
-  if (addedBytes <= 4096 && addedBytes <= remaining) {
-    outcome.mismatch = mismatch;
-    remaining -= addedBytes;
-  }
-}
-console.log(JSON.stringify(outcomes));
-'''
-
-PY_CALL_RUNNER = r'''
-import importlib.util, inspect, json
-payload = json.load(open("/work/payload.json", encoding="utf-8"))
-runtime = next(item for item in payload["problem"]["runtimes"] if item["language"] == payload["request"]["runtime"])
-cases = payload["bundle"]["visibleCases"] if payload["request"]["kind"] == "run" else payload["bundle"]["visibleCases"] + payload["bundle"]["hiddenCases"]
-if payload["request"].get("maxStage"):
-    cases = [item for item in cases if item["stage"] <= payload["request"]["maxStage"]]
-spec = importlib.util.spec_from_file_location("solution", "/work/solution.py")
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-constructor = getattr(module, runtime["entrypoint"]["symbol"])
-outcomes = []
-def json_value(value):
-    try:
-        return json.loads(json.dumps(value, allow_nan=False))
-    except (TypeError, ValueError):
-        return repr(value)
-for test in cases:
-    mismatch = None
-    try:
-        instance = constructor(*test.get("constructorArgs", []))
-        for call in test["calls"]:
-            name = runtime["entrypoint"].get("methodMap", {}).get(call["method"], call["method"])
-            call_input = json_value(call["args"])
-            actual = getattr(instance, name)(*call["args"])
-            if inspect.isawaitable(actual):
-                raise RuntimeError("Métodos assíncronos não são suportados")
-            if actual != call["expected"]:
-                mismatch = {"expected": json_value(call["expected"]), "actual": json_value(actual), "method": call["method"], "input": call_input}
-                raise AssertionError(f"Resultado incorreto em {name}")
-        outcomes.append({"id": test["id"], "name": test["name"], "stage": test["stage"], "passed": True})
-    except Exception as error:
-        outcomes.append({"id": test["id"], "name": test["name"], "stage": test["stage"], "passed": False, "message": str(error), **({"mismatch": mismatch} if mismatch is not None else {})})
-legacy = [{key: value for key, value in outcome.items() if key != "mismatch"} for outcome in outcomes]
-remaining = max(0, int(payload["problem"]["limits"]["outputBytes"]) - len(json.dumps(legacy, ensure_ascii=False).encode("utf-8")) - 1)
-for outcome in outcomes:
-    mismatch = outcome.pop("mismatch", None)
-    if mismatch is None:
-        continue
-    if "input" in mismatch and len(json.dumps(mismatch["input"], ensure_ascii=False).encode("utf-8")) > 2048:
-        del mismatch["input"]
-    added_bytes = len(json.dumps({**outcome, "mismatch": mismatch}, ensure_ascii=False).encode("utf-8")) - len(json.dumps(outcome, ensure_ascii=False).encode("utf-8"))
-    if added_bytes <= 4096 and added_bytes <= remaining:
-        outcome["mismatch"] = mismatch
-        remaining -= added_bytes
-print(json.dumps(outcomes, ensure_ascii=False))
-'''
-
-
-@app.function(
-    image=controller_image,
-    secrets=[modal.Secret.from_name("silogium-judge-token")],
-    timeout=45,
-)
-@modal.fastapi_endpoint(method="POST", docs=False)
-def evaluate(payload: dict, request: fastapi.Request):
-    from fastapi import HTTPException
-
-    expected = os.environ["AUTH_TOKEN"]
-    authorization = request.headers.get("authorization", "")
-    supplied = authorization.removeprefix("Bearer ")
-    if not hmac.compare_digest(supplied, expected):
-        raise HTTPException(status_code=401, detail="unauthorized")
-
-    runtime = payload.get("request", {}).get("runtime")
-    if runtime not in ("typescript", "python"):
-        raise HTTPException(status_code=400, detail="runtime inválido")
-    source = payload["request"].get("source", "")
-    if not source or len(source) > 200_000:
-        raise HTTPException(status_code=400, detail="código inválido")
-
-    image = typescript_image if runtime == "typescript" else python_image
-    sandbox = modal.Sandbox.create(
-        "sleep", "60",
-        app=app,
-        image=image,
-        cpu=(0.25, 1.0),
-        memory=(256, 256),
-        timeout=30,
-        block_network=True,
-    )
-    started = time.monotonic()
-    try:
-        sandbox.exec("mkdir", "-p", "/work").wait()
-        sandbox.filesystem.write_text(json.dumps(payload), "/work/payload.json")
-        sandbox.filesystem.write_text(source, f"/work/solution.{ 'ts' if runtime == 'typescript' else 'py' }")
-        sandbox.filesystem.write_text(textwrap.dedent(RUNNER), "/work/runner.py")
-        sandbox.filesystem.write_text(textwrap.dedent(TS_CALL_RUNNER), "/work/call_runner.mjs")
-        sandbox.filesystem.write_text(textwrap.dedent(PY_CALL_RUNNER), "/work/call_runner.py")
-        process = sandbox.exec("python3" if runtime == "typescript" else "python", "/work/runner.py", timeout=30)
-        output = process.stdout.read()
-        error_output = process.stderr.read()
-        process.wait()
-        if process.returncode != 0:
-            return {
-                "id": str(uuid.uuid4()), "verdict": "system_error", "score": 0, "maxScore": 0,
-                "durationMs": round((time.monotonic() - started) * 1000), "cases": [],
-                "message": error_output[-1000:] or "Falha na infraestrutura do judge."
-            }
-        result = json.loads(output.strip().splitlines()[-1])
-        result["id"] = str(uuid.uuid4())
-        return result
-    except modal.exception.TimeoutError:
-        return {
-            "id": str(uuid.uuid4()), "verdict": "time_limit", "score": 0, "maxScore": 0,
-            "durationMs": 30_000, "cases": [], "message": "Tempo total de execução excedido."
-        }
-    except Exception:
-        return {
-            "id": str(uuid.uuid4()), "verdict": "system_error", "score": 0, "maxScore": 0,
-            "durationMs": round((time.monotonic() - started) * 1000), "cases": [],
-            "message": "Falha na infraestrutura do judge."
-        }
+        await asyncio.wait_for(asyncio.gather(*readers), timeout=timeout_seconds)
     finally:
-        sandbox.terminate()
-        sandbox.detach()
+        for task in readers:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*readers, return_exceptions=True)
+    return ProcessOutput(bytes(buffers[0]), bytes(buffers[1]), process.returncode)
+
+
+class ModalCaseExecutor:
+    async def run(self, case: CandidateCase) -> ProcessOutput:
+        sandbox = None
+        executing_candidate = False
+        try:
+            sandbox = await modal.Sandbox.create.aio(
+                "sleep", "30", app=app,
+                image=typescript_image if case.runtime == "typescript" else python_image,
+                cpu=(0.25, 1.0), memory=(case.memory_mib, case.memory_mib),
+                timeout=30, block_network=True,
+                secrets=[], env={}, include_oidc_identity_token=False,
+            )
+            # write_text creates parent directories. No candidate has run yet.
+            for path, content in candidate_files(case).items():
+                await sandbox.filesystem.write_text.aio(content, path)
+
+            # Compilation never receives input (or any expected values). Keep it
+            # inside this disposable sandbox, but outside the candidate timer.
+            command = (["esbuild", "/work/solution.ts", "--format=esm", "--platform=node", "--target=node22", "--outfile=/work/solution.mjs"]
+                       if case.runtime == "typescript" else ["python", "-I", "-m", "py_compile", "/work/solution.py"])
+            compiled = await sandbox.exec.aio(*command, timeout=10, text=False, bufsize=-1)
+            compilation = await collect_output(compiled, output_bytes=case.output_bytes, timeout_seconds=10)
+            if compilation.returncode != 0:
+                raise CandidateFailure("compile_error", "Não foi possível compilar a solução.", compilation.stderr.decode("utf-8", errors="replace"))
+
+            extension = "mjs" if case.runtime == "typescript" else "py"
+            script = f"/work/{'solution' if case.execution_model == 'stdio' else 'call_runner'}.{extension}"
+            command = ["node", script] if case.runtime == "typescript" else ["python", "-I", script]
+            process = await sandbox.exec.aio(*command, timeout=max(1, math.ceil(case.time_ms / 1000)), text=False, bufsize=-1)
+            executing_candidate = True
+            if case.execution_model == "stdio":
+                # Only this case's stdin crosses the seam; answers never do.
+                process.stdin.write(case.input["stdin"].encode("utf-8"))
+            output = await collect_output(process, output_bytes=case.output_bytes, timeout_seconds=case.time_ms / 1000)
+            if output.returncode in (-9, 137):
+                # Unix SIGKILL is compatible with OOM but not proof of its cause.
+                raise CandidateFailure("memory_limit", "Processo encerrado pelo limite de recursos.")
+            return output
+        except (TimeoutError, modal.exception.TimeoutError):
+            if executing_candidate:
+                raise CandidateFailure("time_limit", "Tempo limite por caso excedido.") from None
+            raise CandidateFailure("system_error", "O judge excedeu o prazo de preparação da execução.") from None
+        except CandidateFailure:
+            raise
+        except Exception:
+            raise CandidateFailure("system_error", "Falha na infraestrutura do judge.") from None
+        finally:
+            if sandbox is not None:
+                # No reuse, even after success. A runaway descendant cannot live
+                # into another test. The platform's lifetime is a second bound.
+                try:
+                    await asyncio.wait_for(sandbox.terminate.aio(), timeout=2)
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        await asyncio.wait_for(sandbox.detach.aio(), timeout=1)
+                    except Exception:
+                        pass
+
+
+@app.function(image=controller_image, secrets=[modal.Secret.from_name("silogium-judge-token")], timeout=40)
+@modal.fastapi_endpoint(method="POST", docs=False)
+async def evaluate(request: fastapi.Request):
+    expected = os.environ.get("AUTH_TOKEN", "")
+    authorization = request.headers.get("authorization", "")
+    if not expected or not authorization.startswith("Bearer ") or not hmac.compare_digest(authorization[7:], expected):
+        raise fastapi.HTTPException(status_code=401, detail="unauthorized")
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > MAX_PAYLOAD_BYTES:
+            raise fastapi.HTTPException(status_code=413, detail="payload too large")
+        raw.extend(chunk)
+    try:
+        payload = parse_json(bytes(raw))
+        if not isinstance(payload, dict) or payload.get("protocolVersion") != PROTOCOL_VERSION:
+            raise ValueError("invalid protocol")
+        request_id = payload["requestId"]
+        if not isinstance(request_id, str) or not 1 <= len(request_id) <= 100:
+            raise ValueError("invalid request ID")
+    except (ValueError, KeyError, RecursionError, UnicodeError):
+        raise fastapi.HTTPException(status_code=400, detail="invalid judge v2 payload") from None
+    result = await evaluate_payload(payload, ModalCaseExecutor())
+    return {"protocolVersion": PROTOCOL_VERSION, "requestId": request_id, "result": result}

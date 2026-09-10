@@ -44,9 +44,12 @@ class ProcessOutput:
 
 
 class CandidateFailure(Exception):
-    def __init__(self, verdict: str, message: str):
+    def __init__(self, verdict: str, message: str, diagnostic: str = ""):
+        if verdict not in {"compile_error", "runtime_error", "time_limit", "memory_limit", "output_limit", "system_error"}:
+            raise ValueError("Invalid failure verdict")
         super().__init__(message)
         self.verdict = verdict
+        self.diagnostic = diagnostic[-2000:]
 
 
 class CaseExecutor(Protocol):
@@ -71,7 +74,10 @@ def _json_value(value, depth=0):
     if value is None or type(value) in (bool, str):
         return True
     if type(value) in (int, float):
-        return math.isfinite(value)
+        try:
+            return math.isfinite(value)
+        except OverflowError:
+            return False
     if type(value) is list:
         return all(_json_value(item, depth + 1) for item in value)
     if type(value) is dict:
@@ -125,7 +131,7 @@ def _prepare(payload):
     runtime = next(item for item in problem["runtimes"] if item["language"] == request["runtime"])
     entrypoint = runtime["entrypoint"]
     model = problem["executionModel"]
-    if model not in ("stdio", "call-sequence") or entrypoint.get("kind") != ("script" if model == "stdio" else "class"):
+    if model not in ("stdio", "call-sequence") or entrypoint.get("kind") != ("stdio" if model == "stdio" else "class"):
         raise ValueError("Entrypoint incompatível.")
     if model == "call-sequence":
         if not _text(entrypoint.get("symbol"), 256) or not isinstance(entrypoint.get("methodMap", {}), dict):
@@ -147,7 +153,7 @@ def _prepare(payload):
         raise ValueError("Casos em excesso ou IDs duplicados.")
     for case in all_cases:
         if (case.get("kind") != model or not _text(case.get("id"), 256)
-                or not _text(case.get("name"), 512) or case.get("stage") not in stage_numbers):
+                or not _text(case.get("name"), 512) or not _integer(case.get("stage"), 1, 4) or case.get("stage") not in stage_numbers):
             raise ValueError("Caso incompatível.")
         if model == "stdio":
             if not _text(case.get("stdin"), 2_000_000, empty=True) or not _text(case.get("expectedStdout"), 2_000_000, empty=True):
@@ -170,7 +176,7 @@ def candidate_case(request, entrypoint, case, limits):
         "constructorArgs": copy.deepcopy(case["constructorArgs"]),
         "calls": [{"method": call["method"], "args": copy.deepcopy(call["args"])} for call in case["calls"]],
     })
-    public_entrypoint = ({"kind": "script"} if case["kind"] == "stdio" else {
+    public_entrypoint = ({"kind": "stdio"} if case["kind"] == "stdio" else {
         "kind": "class", "symbol": entrypoint["symbol"], "methodMap": copy.deepcopy(entrypoint.get("methodMap", {})),
     })
     return CandidateCase(request["runtime"], request["source"], case["kind"], public_entrypoint, case_input, **limits)
@@ -225,7 +231,7 @@ async def evaluate_payload(payload, executor: CaseExecutor, *, total_seconds=TOT
 
     try:
         problem, request, entrypoint, cases, hidden_ids, limits = _prepare(payload)
-    except (KeyError, TypeError, ValueError, StopIteration, OverflowError, RecursionError):
+    except (KeyError, TypeError, ValueError, AttributeError, StopIteration, OverflowError, RecursionError):
         return failure("system_error", "Pacote inválido ou incompatível com o judge v2.")
 
     semaphore = asyncio.Semaphore(min(max(1, concurrency), PARALLEL_CASES))
@@ -238,7 +244,7 @@ async def evaluate_payload(payload, executor: CaseExecutor, *, total_seconds=TOT
             if len(output.stdout) + len(output.stderr) > limits["output_bytes"]:
                 raise CandidateFailure("output_limit", "Limite de saída excedido.")
             if output.returncode != 0:
-                raise CandidateFailure("runtime_error", "A solução terminou com erro.")
+                raise CandidateFailure("runtime_error", "A solução terminou com erro.", output.stderr.decode("utf-8", errors="replace"))
             mismatch = _compare(case, output)
             hidden = request["kind"] == "submission" and case["id"] in hidden_ids
             outcome = {"id": case["id"], "name": "Teste oculto" if hidden else case["name"],
@@ -252,9 +258,15 @@ async def evaluate_payload(payload, executor: CaseExecutor, *, total_seconds=TOT
 
     tasks = [asyncio.create_task(run_case(case)) for case in cases]
     try:
-        outcomes = await asyncio.wait_for(asyncio.gather(*tasks), timeout=min(total_seconds, TOTAL_SECONDS))
+        remaining = max(0, min(total_seconds, TOTAL_SECONDS) - (time.monotonic() - started))
+        outcomes = await asyncio.wait_for(asyncio.gather(*tasks), timeout=remaining)
     except CandidateFailure as error:
-        return failure(error.verdict, str(error))
+        # A candidate may echo its input in stderr. Hidden execution diagnostics
+        # must never enter the response, including the top-level message.
+        message = str(error)
+        if request["kind"] == "run" and error.diagnostic:
+            message += "\n" + error.diagnostic
+        return failure(error.verdict, message)
     except TimeoutError:
         # Includes provisioning/compilation/transport. Not attributable to candidate time.
         return failure("system_error", "O judge excedeu o prazo total de processamento. Tente novamente.")
@@ -272,7 +284,7 @@ async def evaluate_payload(payload, executor: CaseExecutor, *, total_seconds=TOT
         if selected:
             max_score += stage["points"]
             # Match JavaScript Math.round for nonnegative stage scores.
-            score += math.floor(stage["points"] * sum(case["passed"] for case in selected) / len(selected) + 0.5)
+            score += math.floor((sum(case["passed"] for case in selected) / len(selected)) * stage["points"] + 0.5)
     result = {"id": result_id, "verdict": "accepted" if all(case["passed"] for case in outcomes) else "wrong_answer",
               "score": score, "maxScore": max_score, "cases": outcomes,
               "durationMs": round((time.monotonic() - started) * 1000)}

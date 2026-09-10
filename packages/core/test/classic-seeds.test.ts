@@ -56,9 +56,23 @@ function graphOracle(values: number[]): string {
 }
 
 describe("seeds clássicos públicos", () => {
-  it("preserva integralmente os três seeds progressivos, suas versões e ordem", () => {
+  it("preserva os três seeds progressivos, suas versões e ordem com textos canônicos LF", () => {
     const hash = createHash("sha256").update(JSON.stringify(seedProblems.slice(0, 3))).digest("hex");
-    expect(hash).toBe("6e0d2856a07ed68282ca4e49f7f44580754b853997800e090256ce620ac1abd2");
+    // Golden from the original three definitions with CRLF -> LF only. It must
+    // match on Linux CI and Windows without modifying the user's source files.
+    expect(hash).toBe("4f711e2b200412da2152187a1a6b86a35e2c333868c6c96530e4722d82e9d210");
+  });
+
+  it("normaliza somente texto-fonte, sem alterar whitespace das fixtures stdio", () => {
+    for (const problem of seedProblems) {
+      for (const stage of problem.stages) expect(stage.statementMd).not.toContain("\r\n");
+      for (const runtime of problem.runtimes) expect(runtime.starterCode).not.toContain("\r\n");
+    }
+    for (const problem of classics) {
+      const whitespace = bundleFor(problem.slug).visibleCases.find((test) => test.id === "whitespace");
+      expect(whitespace?.kind).toBe("stdio");
+      if (whitespace?.kind === "stdio") expect(whitespace.stdin).toContain("\r\n");
+    }
   });
 
   it("adiciona três questões distintas com contrato stdio e ambas as linguagens", () => {

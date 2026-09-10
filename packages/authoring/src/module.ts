@@ -17,17 +17,24 @@ export class ProblemAuthoringModule implements ProblemAuthoring {
     private readonly beforeAi: (actor: Actor) => Promise<void> = async () => {},
     readonly conversations: ConversationRepository = new MemoryConversationRepository(),
     private readonly editorial = new ProblemEditorial(repository, validator),
-    private readonly queue?: AuthoringQueue
+    private readonly queue?: AuthoringQueue,
+    private readonly disabledReason?: string
   ) {}
 
   async request(rawInput: AuthoringRequest, actor: Actor): Promise<{ jobId: string; conversationId: string }> {
+    if (this.disabledReason) throw new Error(this.disabledReason);
     const input = parseAuthoringRequest(rawInput);
-    const conversation = input.conversationId ? await this.conversations.get(input.conversationId, actor) : await this.conversations.create(actor, requestText(input));
+    const now = new Date().toISOString();
+    const newConversation = this.queue && !input.conversationId ? {
+      id: crypto.randomUUID(), actorId: actor.id, title: requestText(input).trim().slice(0, 120) || "Nova conversa", createdAt: now, updatedAt: now
+    } : undefined;
+    const conversation = input.conversationId ? await this.conversations.get(input.conversationId, actor)
+      : newConversation ?? await this.conversations.create(actor, requestText(input));
     if (!conversation) throw new Error("Conversa não encontrada.");
     input.conversationId = conversation.id;
     const job: AuthoringJob = { id: crypto.randomUUID(), actorId: actor.id, status: "running", request: input, createdAt: new Date().toISOString() };
     if (this.queue) {
-      await this.queue.enqueue(job, actor, this.conversationTurn(job, actor));
+      await this.queue.enqueue(job, actor, this.conversationTurn(job, actor), newConversation);
       return { jobId: job.id, conversationId: conversation.id };
     }
     await this.repository.saveJob(job);
@@ -39,13 +46,14 @@ export class ProblemAuthoringModule implements ProblemAuthoring {
   }
 
   async confirmCreation(jobId: string, actor: Actor): Promise<{ jobId: string }> {
+    if (this.disabledReason) throw new Error(this.disabledReason);
     const existing = await this.repository.getJob(jobId);
     if (!existing || existing.actorId !== actor.id || existing.request.mode !== "create") throw new Error("Pedido de criação não encontrado.");
     // Retries after a lost response observe the same job; they never start another generation.
     if (existing.status === "running" || (existing.status === "completed" && existing.result?.kind === "create")) return { jobId };
     if (existing.status !== "needs_confirmation") throw new Error("Este pedido não aguarda confirmação. Faça um novo pedido para tentar novamente.");
     if (this.queue) {
-      await this.queue.confirm(jobId, actor.id);
+      if (!await this.queue.confirm(jobId, actor.id)) throw new Error("Não foi possível retomar este pedido. Ele pode ser anterior à fila atual; confira Minhas questões e inicie um novo pedido se necessário.");
       return { jobId };
     }
     const confirmedInput = parseAuthoringRequest(existing.request);
@@ -73,6 +81,11 @@ export class ProblemAuthoringModule implements ProblemAuthoring {
     const request = job.request;
     const step = <T>(key: string, compute: () => Promise<T>) => work ? work.step(key, compute) : compute();
     const beforeAi = () => work ? work.beforeAi() : this.beforeAi(actor);
+    const validate = (key: string, value: Pick<GeneratedPackage, "problem" | "bundle">) => step(key, async () => {
+      const report = await this.validator.validate(value.problem, value.bundle);
+      if (work && report.infrastructureError) throw new Error("O judge está indisponível. A validação será retomada automaticamente.");
+      return report;
+    });
     try {
       const context = request.conversationId && await this.conversations.get(request.conversationId, actor)
         ? conversationContext((await this.conversations.listTurns(request.conversationId, actor, { limit: 5 })).items, job.id) : [];
@@ -92,7 +105,7 @@ export class ProblemAuthoringModule implements ProblemAuthoring {
           provenance: draft.problem.provenance, origin: draft.problem.origin, visibility: draft.problem.visibility,
           format: draft.problem.format, executionModel: draft.problem.executionModel, createdAt: draft.problem.createdAt };
         refined.bundle = { ...refined.bundle, problemId: draft.problem.id, problemVersion: draft.problem.version };
-        const validation = await step("refinement-validation", () => this.validator.validate(refined.problem, refined.bundle));
+        const validation = await validate("refinement-validation", refined);
         if (work) {
           work.effects.editorial = await this.editorial.prepareGeneratedDraft(input.slug, actor, { expectedRevision: input.expectedRevision, ...refined });
           const saved = work.effects.editorial.record;
@@ -131,10 +144,10 @@ export class ProblemAuthoringModule implements ProblemAuthoring {
         job.result = { kind: "search", candidates: [...ranked, ...merged.filter((candidate) => !rankedIds.has(candidate.id))].slice(0, 7) };
       } else {
         let generated = await step("generated", () => this.ai.create(input, actor, discoveryContext(known), context));
-        let validation = await step("generation-validation", () => this.validator.validate(generated.problem, generated.bundle));
+        let validation = await validate("generation-validation", generated);
         if (!validation.valid && this.ai.repair) {
           generated = await step("repaired", () => this.ai.repair!(input, actor, generated, validation));
-          validation = await step("repair-validation", () => this.validator.validate(generated.problem, generated.bundle));
+          validation = await validate("repair-validation", generated);
         }
         generated.problem.status = validation.valid ? (input.visibility === "public" ? "pending_review" : "validated") : "rejected";
         generated.problem.metadata = buildProblemMetadata(generated.problem);
@@ -193,6 +206,7 @@ export class ProblemAuthoringModule implements ProblemAuthoring {
   }
 
   async importLicensed(sourceName: string, slug: string, rawRuntime: Runtime, actor: Actor, work?: JobWork) {
+    if (this.disabledReason) throw new Error(this.disabledReason);
     if (this.queue && !work) throw new Error("Use um pedido de importação assíncrono; a importação será executada pelo worker.");
     const step = <T>(key: string, compute: () => Promise<T>) => work ? work.step(key, compute) : compute();
     const runtime = RuntimeSchema.parse(rawRuntime);
@@ -213,7 +227,11 @@ export class ProblemAuthoringModule implements ProblemAuthoring {
     generated.problem.provenance = licensedProvenance(loaded, actor);
     generated.problem.visibility = "private";
     if (!generated.problem.runtimes.some((definition) => definition.language === runtime)) throw new Error("A conversão não preservou a linguagem solicitada.");
-    const validation = await step("import-validation", () => this.validator.validate(generated.problem, generated.bundle));
+    const validation = await step("import-validation", async () => {
+      const report = await this.validator.validate(generated.problem, generated.bundle);
+      if (work && report.infrastructureError) throw new Error("O judge está indisponível. A validação será retomada automaticamente.");
+      return report;
+    });
     generated.problem.status = validation.valid ? "validated" : "rejected";
     generated.problem.metadata = buildProblemMetadata(generated.problem);
     const value = { ...generated, validation };

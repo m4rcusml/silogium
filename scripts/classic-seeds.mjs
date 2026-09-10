@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const generatedAt = "2026-09-10T12:00:00.000Z";
+const sourceText = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 const stdioCase = (id, name, stdin, expectedStdout) => ({ kind: "stdio", id, name, stage: 1, stdin, expectedStdout });
 const packagesInput = (target, volumes) => `${volumes.length} ${target}\n${volumes.join(" ")}\n`;
 const intervalsInput = (intervals) => `${intervals.length}\n${intervals.map((pair) => pair.join(" ")).join("\n")}\n`;
@@ -82,10 +83,10 @@ export function buildClassicSeeds(root) {
       difficulty: item.difficulty,
       tags: item.tags,
       metadata: item.metadata,
-      stages: [{ number: 1, statementMd: readFileSync(join(root, "questions/classic", item.slug, "STATEMENT.md"), "utf8"), points: 100 }],
+      stages: [{ number: 1, statementMd: sourceText(join(root, "questions/classic", item.slug, "STATEMENT.md")), points: 100 }],
       runtimes: [
-        { language: "typescript", version: "22.22.0", starterCode: readFileSync(join(root, "solutions/typescript", `${item.slug}.ts`), "utf8"), entrypoint: { kind: "stdio" } },
-        { language: "python", version: "3.13.11", starterCode: readFileSync(join(root, "solutions/python", `${item.slug}.py`), "utf8"), entrypoint: { kind: "stdio" } }
+        { language: "typescript", version: "22.22.0", starterCode: sourceText(join(root, "solutions/typescript", `${item.slug}.ts`)), entrypoint: { kind: "stdio" } },
+        { language: "python", version: "3.13.11", starterCode: sourceText(join(root, "solutions/python", `${item.slug}.py`)), entrypoint: { kind: "stdio" } }
       ],
       examples: item.examples,
       limits: { timeMs: 2_000, memoryMiB: 256, outputBytes: 65_536 },

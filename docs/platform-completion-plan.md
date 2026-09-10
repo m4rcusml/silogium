@@ -4,6 +4,8 @@ Data: 2026-09-09. Status: funcionalidades implementadas e verificadas localmente
 
 Atualização de 2026-09-10: Studio com orientação contextual, fluxo de autoria mais claro e catálogo inicial ampliado para três clássicas + três progressivas. Detalhes e validações desta etapa em [studio-ux-2026-09-10.md](studio-ux-2026-09-10.md).
 
+Atualização de infraestrutura de 2026-09-10: fila durável, worker, proteção do judge, bloqueio do modo demo em produção, preparação privada dos seis seeds e CI implementados localmente. O provedor de IA hospedado continua por decidir. Estado e evidências desta rodada em [predeploy-2026-09-10.md](predeploy-2026-09-10.md); não confundir implementação/testes offline com homologação de Supabase/Modal.
+
 ## Escopo e decisões
 
 Concluir o inventário funcional da conversa: autoria e revisão, conversa com IA, qualidade dos pacotes, histórico completo, retomada, importação, gamificação leve e expansões de personalização. Não criar páginas para cada recurso: concentrar em Praticar, Studio, resolução e perfil. Manter o tema escuro, tipografia, espaçamento e acessibilidade existentes.
@@ -130,12 +132,14 @@ O módulo editorial concentra rascunhos/revisões/versões; ambos os adapters us
 ## Pendências de ambiente e operação (bloqueiam publicação pública)
 
 1. **Banco:** escolher Supabase de desenvolvimento/staging ou instalar infraestrutura local autorizada. Executar todas as migrações e pgTAP, testar OAuth com duas contas, RLS, RPCs service-only, CAS e rollback transacional. Arquivos SQL preparados não equivalem a testes executados.
-2. **Fila/worker:** jobs são acompanháveis e guardam histórico, mas a execução ainda usa o processo da aplicação. Reinício pode interromper autoria/importação. Implementar/validar consumo durável com retry, lease, idempotência e recuperação após morte do worker antes de usar serverless público.
-3. **Judge:** validar isolamento real de TypeScript/Python, limites de rede/memória/processos/arquivos e proteção de fixtures contra o código submetido. O runner local é somente para código confiável. Não habilitar `SILOGIUM_VERIFIED_JUDGE_POLICY` sem essa auditoria.
+2. **Fila/worker:** consumo durável implementado para hospedagem, com retry, lease, checkpoints, limites de admissão e gravação transacional dos resultados. O modo local integrado foi preservado. Falta executar migração/pgTAP e comprovar recuperação após morte do worker no ambiente real antes de habilitar autoria hospedada; detalhes em `authoring-worker.md`.
+3. **Judge:** o controlador confiável agora compara resultados fora da sandbox e envia somente a entrada do caso atual ao código submetido. Contratos e cenários adversariais passaram offline; falta validar isolamento real de TypeScript/Python, limites de rede/memória/processos/arquivos e tempo de inicialização no Modal. O runner local é somente para código confiável. Não habilitar `SILOGIUM_VERIFIED_JUDGE_POLICY` sem essa auditoria.
 4. **IA e serviços reais:** exercitar criação/refinamento multilíngue e importação completa com o provedor escolhido, sem conta pessoal Codex em servidor público. Testes desta etapa não chamaram IA paga nem Modal real.
 5. **Operação:** escolher orçamento, retenção de código/prompts, domínio e responsável pela moderação; configurar secrets externos, observabilidade, backups/restauração e pipeline de staging. Nada foi provisionado/publicado nesta etapa.
 
-## Evidências da verificação local
+## Evidências da verificação local da rodada funcional anterior
+
+Os números abaixo são históricos. Para os testes posteriores de infraestrutura/pré-deploy, consultar `predeploy-2026-09-10.md`.
 
 - `npm run typecheck`: todos os workspaces aprovados na versão integrada.
 - `npm test -- --maxWorkers=2`: **298 testes aprovados em 31 arquivos**.
@@ -154,4 +158,5 @@ O módulo editorial concentra rascunhos/revisões/versões; ambos os adapters us
 - `practice-history-implementation.md`: histórico, evidência, gamificação e flags de confiança.
 - `submission-completion.md`: confirmação após envio completo aprovado, orientação em testes parciais e verificação de acessibilidade desktop/mobile (10/09/2026).
 - `gamification-plan.md`: proposta original, com atualização de implementação no início.
-- `DEPLOYMENT.md`: guia de infraestrutura; observar a atualização de estado, pois os comandos da proposta original não são um runbook já validado.
+- `DEPLOYMENT.md`: runbook atualizado de configuração, staging e deploy; etapas de serviços reais continuam pendentes de execução.
+- `predeploy-2026-09-10.md`: implementação e verificação mais recentes de segurança, jobs, seeds e CI.

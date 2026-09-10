@@ -8,6 +8,7 @@ export class StructuralProblemValidator implements ProblemValidator {
   async validate(rawProblem: ProblemDefinition, rawBundle: JudgeBundle): Promise<ValidationReport> {
     const checks: ValidationReport["checks"] = [];
     const warnings: string[] = [];
+    let infrastructureError = false;
     const definition = ProblemDefinitionSchema.safeParse(rawProblem);
     checks.push({ name: "schema da questão", passed: definition.success, message: definition.success ? undefined : definition.error.issues[0]?.message });
     const judge = JudgeBundleSchema.safeParse(rawBundle);
@@ -52,8 +53,11 @@ export class StructuralProblemValidator implements ProblemValidator {
     for (const runtime of problem.runtimes) {
       const base = { problemId: problem.id, problemVersion: problem.version, runtime: runtime.language, kind: "submission" } as const;
       const evaluate = async (source: string): Promise<ExecutionResult | null> => {
-        try { return await this.executor!.evaluate(problem, bundle, { ...base, source }); }
-        catch { return null; }
+        try {
+          const result = await this.executor!.evaluate(problem, bundle, { ...base, source });
+          if (result.verdict === "system_error") infrastructureError = true;
+          return result;
+        } catch { infrastructureError = true; return null; }
       };
       const referenceResult = await evaluate(bundle.referenceSolutions[runtime.language]!);
       const referencePassed = referenceResult?.verdict === "accepted" && referenceResult.cases.length === cases.length
@@ -89,6 +93,6 @@ export class StructuralProblemValidator implements ProblemValidator {
         checks.push({ name: `mutante ${mutation.name} em ${runtime.language}`, passed: status === "killed", message: status === "inconclusive" ? "Falha de execução/infra não conta como mutante detectado." : status === "survived" ? "Os testes aceitaram uma variante sabidamente defeituosa." : undefined });
       }
     }
-    return { valid: checks.every((check) => check.passed), checks, warnings, coverage };
+    return { valid: checks.every((check) => check.passed), checks, warnings, coverage, ...(infrastructureError ? { infrastructureError: true } : {}) };
   }
 }

@@ -14,12 +14,17 @@ const Constructor = imported[entrypoint.symbol];
 if (typeof Constructor !== "function") throw new Error("Símbolo exportado não encontrado");
 const instance = new Constructor(...constructorArgs);
 const values = [];
+const snapshot = (value) => JSON.parse(JSON.stringify({ value }, (_key, item) => {
+  if (typeof item === "number" && !Number.isFinite(item)) throw new TypeError("Número de retorno inválido");
+  if (["undefined", "function", "symbol"].includes(typeof item)) throw new TypeError("Valor de retorno não é JSON");
+  return item;
+}));
 for (const call of calls) {
   const method = Object.hasOwn(entrypoint.methodMap, call.method) ? entrypoint.methodMap[call.method] : call.method;
   if (typeof instance[method] !== "function") throw new Error("Método não encontrado");
   const value = await instance[method](...call.args);
-  // Missing/undefined values remain invalid, never implicitly become null.
-  values.push({ value });
+  // Capture now: later calls may mutate an object returned by this call.
+  values.push(snapshot(value));
 }
 process.stdout.write(JSON.stringify(values));
 '''
@@ -38,7 +43,8 @@ for call in data["calls"]:
     value = getattr(instance, name)(*call["args"])
     if inspect.isawaitable(value):
         raise RuntimeError("Métodos assíncronos não são suportados no runner Python")
-    values.append({"value": value})
+    # A returned mutable value belongs to this point in the call sequence.
+    values.append({"value": json.loads(json.dumps(value, ensure_ascii=False, allow_nan=False))})
 print(json.dumps(values, ensure_ascii=False, allow_nan=False))
 '''
 

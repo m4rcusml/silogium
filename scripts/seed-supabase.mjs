@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { createClient } from "@supabase/supabase-js";
+import { loadSeedPackages } from "./lib/private-seeds.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -10,9 +10,10 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!url || !serviceKey) throw new Error("Configure NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.");
 
 const client = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-const problems = JSON.parse(readFileSync(resolve(repositoryRoot, "content/problems/generated-catalog.json"), "utf8"));
-const classicSeeds = new Map(JSON.parse(readFileSync(resolve(repositoryRoot, "content/problems/classic-registry.json"), "utf8")).map((item) => [item.id, item.slug]));
 const privateDirectory = process.env.SILOGIUM_PRIVATE_BUNDLES_DIR ? resolve(process.env.SILOGIUM_PRIVATE_BUNDLES_DIR) : null;
+// Validate all six packages before the first remote operation. Missing private
+// fixtures or references must not silently seed public-only official questions.
+const packages = loadSeedPackages(repositoryRoot, privateDirectory ?? undefined);
 
 function fingerprint(problem) {
   const normalize = (value) => value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
@@ -22,26 +23,7 @@ function fingerprint(problem) {
   return `fnv1a-${(value >>> 0).toString(16).padStart(8, "0")}`;
 }
 
-for (const problem of problems) {
-  const visible = JSON.parse(readFileSync(resolve(repositoryRoot, `content/judge/${problem.slug}.visible.json`), "utf8"));
-  const privatePath = privateDirectory && resolve(privateDirectory, `${problem.slug}.private.json`);
-  const privateBundle = privatePath && existsSync(privatePath) ? JSON.parse(readFileSync(privatePath, "utf8")) : null;
-  const privateTypeScript = privateDirectory && resolve(privateDirectory, `${problem.slug}.reference.ts`);
-  const privatePython = privateDirectory && resolve(privateDirectory, `${problem.slug}.reference.py`);
-  const legacyQ1Reference = problem.slug === "rede-de-armarios" ? resolve(repositoryRoot, "reference-solutions/typescript/question1.ts") : null;
-  const classicReference = (runtime, extension) => classicSeeds.get(problem.id) === problem.slug ? resolve(repositoryRoot, `reference-solutions/${runtime}/${problem.slug}.${extension}`) : null;
-  const publicTypeScript = classicReference("typescript", "ts") ?? legacyQ1Reference;
-  const publicPython = classicReference("python", "py");
-  const referenceSolutions = {
-    ...(privateBundle?.referenceSolutions ?? {}),
-    ...((privateTypeScript && existsSync(privateTypeScript)) ? { typescript: readFileSync(privateTypeScript, "utf8") } : publicTypeScript && existsSync(publicTypeScript) ? { typescript: readFileSync(publicTypeScript, "utf8") } : {}),
-    ...((privatePython && existsSync(privatePython)) ? { python: readFileSync(privatePython, "utf8") } : publicPython && existsSync(publicPython) ? { python: readFileSync(publicPython, "utf8") } : {})
-  };
-  const bundle = {
-    ...visible,
-    hiddenCases: privateBundle?.hiddenCases ?? [],
-    referenceSolutions
-  };
+for (const { problem, bundle } of packages) {
   const checksum = createHash("sha256").update(JSON.stringify(bundle)).digest("hex");
   const previous = await client.from("problem_versions").select("definition").eq("problem_id", problem.id).eq("version", problem.version).maybeSingle();
   if (previous.error) throw new Error(previous.error.message);

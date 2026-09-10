@@ -70,6 +70,12 @@ export class MemoryConversationRepository implements ConversationRepository {
   private readonly conversations = new Map<string, Conversation>();
   private readonly turns = new Map<string, ConversationTurn>();
 
+  /** Internal atomic admission path; the queued request supplies a server-created identity. */
+  createQueued(conversation: Conversation, actor: Actor): void {
+    if (conversation.actorId !== actor.id || this.conversations.has(conversation.id)) throw new Error("Conversa inválida.");
+    this.conversations.set(conversation.id, structuredClone(conversation));
+  }
+
   async create(actor: Actor, title: string): Promise<Conversation> {
     const now = new Date().toISOString();
     const conversation = { id: crypto.randomUUID(), actorId: actor.id, title: title.trim().slice(0, 120) || "Nova conversa", createdAt: now, updatedAt: now };

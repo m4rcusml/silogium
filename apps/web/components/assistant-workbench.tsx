@@ -14,7 +14,7 @@ import { StudioExamples, StudioGuide, StudioModePicker } from "./studio-orientat
 
 type RefinementDraft = { revision: number; phase: "draft" | "validating" | "validated"; problem: { title: string; slug: string } };
 
-export function AssistantWorkbench({ providerLabel, initialSection = "compose", initialMode = "search", initialSlug, isAdmin = false, actorId }: { providerLabel: string; initialSection?: "compose" | "mine"; initialMode?: "search" | "create" | "refine"; initialSlug?: string; isAdmin?: boolean; actorId?: string }) {
+export function AssistantWorkbench({ providerLabel, authoringAvailable = true, initialSection = "compose", initialMode = "search", initialSlug, isAdmin = false, actorId }: { providerLabel: string; authoringAvailable?: boolean; initialSection?: "compose" | "mine"; initialMode?: "search" | "create" | "refine"; initialSlug?: string; isAdmin?: boolean; actorId?: string }) {
   const router = useRouter();
   const [section, setSection] = useState(initialSection);
   const [mode, setMode] = useState<"search" | "create" | "refine">(initialMode);
@@ -86,7 +86,7 @@ export function AssistantWorkbench({ providerLabel, initialSection = "compose", 
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (loading || (mode === "refine" && (!draft || draft.phase === "validating"))) return;
+    if (!authoringAvailable || loading || (mode === "refine" && (!draft || draft.phase === "validating"))) return;
     setSending(true);
     setRequestError(undefined);
     setImported(undefined);
@@ -111,6 +111,7 @@ export function AssistantWorkbench({ providerLabel, initialSection = "compose", 
   }
 
   async function importCandidate(candidate: Candidate) {
+    if (!authoringAvailable) return;
     setImporting(candidate.id);
     setImported(undefined);
     setImportError(undefined);
@@ -169,9 +170,10 @@ export function AssistantWorkbench({ providerLabel, initialSection = "compose", 
       </div>}
 
       {section === "mine" ? <div className="studio-library"><MyProblems refreshKey={result?.kind === "create" ? result.package.problem.id : imported?.problem.id} /></div> : <>
+        {!authoringAvailable && <div className="notice" role="status"><p>A pesquisa e a criação com IA ainda não estão habilitadas neste ambiente. Suas questões e conversas continuam disponíveis.</p><Link className="button" href="/explorar">Praticar questões do catálogo</Link></div>}
         <StudioGuide />
         <StudioModePicker mode={mode} canRefine={Boolean(initialSlug)} disabled={loading || Boolean(importing)} onChange={changeMode} />
-        <form className="authoring-form" onSubmit={submit}>
+        {authoringAvailable && <form className="authoring-form" onSubmit={submit}>
           <div className="studio-form-intro"><h2>{mode === "search" ? "Encontre o que quer praticar" : mode === "create" ? "Descreva sua nova questão" : "Ajuste o enunciado e os testes"}</h2><p>{mode === "search" ? "Diga o assunto ou a habilidade. Você receberá sugestões com fonte e um caminho para resolver." : mode === "create" ? "A IA prepara o enunciado, o código inicial e os testes. Após a validação, você pode começar a resolver — não precisa publicar." : "Refinar muda a questão, não escreve sua solução. As alterações precisam ser revisadas e validadas antes de ficar disponíveis para resolução."}</p></div>
           {conversationId && <div className="studio-context"><p>Continuando uma conversa. A IA considera até quatro pedidos anteriores.</p><button type="button" className="button" disabled={loading} onClick={() => { setConversationId(undefined); request.clear(); setRequestError(undefined); setImportError(undefined); setImported(undefined); setLicensesAccepted(false); }}>Começar outro assunto</button></div>}
           {mode === "refine" && (draftError ? <div className="notice" role="alert"><p>Não foi possível abrir o rascunho: {draftError}</p><button type="button" className="button" onClick={() => setDraftReload((value) => value + 1)}>Tentar abrir rascunho novamente</button></div> : <p className="notice" role="status">{draft?.phase === "validating" ? <>A validação deste rascunho está em andamento. Aguarde a conclusão antes de pedir um refinamento. <Link href={`/studio?section=mine&edit=${encodeURIComponent(draft.problem.slug)}`}>Consultar rascunho no editor</Link></> : <>{draft ? `Refinando “${draft.problem.title}”, revisão ${draft.revision}.` : "Carregando rascunho…"} A IA recebe os materiais de autoria para manter testes e referência coerentes. A versão publicada permanece inalterada.</>}</p>)}
@@ -186,7 +188,7 @@ export function AssistantWorkbench({ providerLabel, initialSection = "compose", 
           </div>
           {mode === "create" && visibility === "public" && <label className="license-consent"><input type="checkbox" checked={licensesAccepted} onChange={(event) => setLicensesAccepted(event.target.checked)} /><span>Aceito publicar o enunciado sob CC BY 4.0 e o starter e testes visíveis sob MIT, com crédito permanente.</span></label>}
           <div className="authoring-submit-row"><p>{mode === "refine" ? "Consome uma operação de IA. Não pesquisa a web. O resultado fica como rascunho para você revisar, salvar e validar no editor antes de publicar." : mode === "search" ? "Busca no catálogo, em fontes licenciadas e na web. Links externos abrem no site de origem." : "Primeiro verificamos questões parecidas. Se houver sugestões, você decide se quer criar outra. A criação não pesquisa a web e passa por testes automáticos."}</p><button className="button primary" disabled={loading || Boolean(importing) || prompt.trim().length < 5 || (mode === "refine" && (!draft || draft.phase === "validating")) || (mode === "create" && visibility === "public" && !licensesAccepted)}>{loading ? <LoaderCircle className="spin" size={16} /> : mode === "search" ? <Search size={16} /> : <FilePenLine size={16} />}{loading ? "Pedido em andamento" : mode === "refine" ? "Refinar com IA" : mode === "search" ? "Encontrar questões" : "Criar e validar"}</button></div>
-        </form>
+        </form>}
 
         <div className="authoring-results">
           {requestError && <div className="notice danger-text" role="alert">{requestError}</div>}
@@ -195,7 +197,7 @@ export function AssistantWorkbench({ providerLabel, initialSection = "compose", 
           {importError && <div className="notice danger-text" role="alert">{importError}</div>}
           {importing && <div className="notice" role="status">Registrando a importação. Depois de receber o identificador, você pode sair desta página e acompanhar pelo histórico.</div>}
           {imported && <CreatedResult value={imported} actorId={actorId} isAdmin={isAdmin} />}
-          {request.job?.status === "needs_confirmation" && result?.kind === "recommendations" && analyzed && <SimilarProblems candidates={result.candidates} snapshot={analyzed} edited={edited} busy={loading} error={request.confirmationError} onConfirm={() => void request.confirm()} onAdjust={adjustRequest} onRetry={request.retry} />}
+          {request.job?.status === "needs_confirmation" && result?.kind === "recommendations" && analyzed && <SimilarProblems candidates={result.candidates} snapshot={analyzed} edited={edited} busy={loading || !authoringAvailable} error={request.confirmationError} onConfirm={() => { if (authoringAvailable) void request.confirm(); }} onAdjust={adjustRequest} onRetry={request.retry} />}
           {result?.kind === "search" && <section className="search-results" aria-label="Questões encontradas">
             <h2>Escolha seu próximo desafio</h2><p>Resolver abre o editor do Silogium. Ver na fonte abre o site original. Importar e validar prepara uma cópia licenciada para resolver aqui.</p>
             <p role="status">{result.candidates.length ? `${result.candidates.length} ${result.candidates.length === 1 ? "questão encontrada" : "questões encontradas"}` : "Nenhuma questão encontrada. Tente outro tema ou uma descrição mais ampla."}</p>
@@ -203,7 +205,7 @@ export function AssistantWorkbench({ providerLabel, initialSection = "compose", 
               <div><CandidateOrigin candidate={candidate} /><h2>{candidate.title}</h2><p>{candidate.summary}</p><CandidateDetails candidate={candidate} /></div>
               <div className="result-actions">
                 {candidate.kind === "catalog" ? <Link className="button" href={candidate.url}>Resolver</Link> : <a href={candidate.url} target="_blank" rel="noreferrer">Ver na fonte <ArrowUpRight size={14} /></a>}
-                {candidate.kind === "licensed_import" && candidate.importable && <button className="button" type="button" disabled={Boolean(importing) || loading} onClick={() => importCandidate(candidate)}>{importing === candidate.id ? "Importando…" : "Importar e validar"}</button>}
+                {candidate.kind === "licensed_import" && candidate.importable && <button className="button" type="button" disabled={!authoringAvailable || Boolean(importing) || loading} onClick={() => importCandidate(candidate)}>{importing === candidate.id ? "Importando…" : "Importar e validar"}</button>}
               </div>
             </article>)}
           </section>}

@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertSafePublicBuildConfig } from "./lib/build-config";
+
+assertSafePublicBuildConfig(process.env);
 
 const monorepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 

@@ -1,4 +1,3 @@
-import { Codex } from "@openai/codex-sdk";
 import type { Actor, Runtime } from "@silogium/core";
 import { OpenAiAuthoringAdapter } from "./openai.js";
 import type { DiscoveryContext, SearchCandidate } from "./types.js";
@@ -36,6 +35,8 @@ export class CodexSdkStructuredRunner implements CodexStructuredRunner {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), request.timeoutMs);
     try {
+      // Personal SDK is ESM-only and optional at runtime. Hosted workers never load it.
+      const { Codex } = await import("@openai/codex-sdk");
       const codex = new Codex();
       const thread = codex.startThread({
         model: request.model,

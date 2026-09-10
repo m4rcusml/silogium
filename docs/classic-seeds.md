@@ -1,6 +1,6 @@
 # Banco inicial: três clássicas adicionais
 
-O catálogo tem seis questões: as três progressivas originais, preservadas byte a byte na representação JSON, e as três clássicas abaixo. Clássicas usam uma etapa de 100 pontos, entrada/saída padrão e aceitam TypeScript e Python.
+O catálogo tem seis questões: as três progressivas originais, preservadas em conteúdo, identidade, ordem e versão, e as três clássicas abaixo. Enunciados e starters gerados usam LF canônico para que o catálogo seja igual em Windows/Linux. Clássicas usam uma etapa de 100 pontos, entrada/saída padrão e aceitam TypeScript e Python.
 
 | Slug | Dificuldade | Foco | Casos públicos |
 | --- | --- | --- | --- |
@@ -19,6 +19,8 @@ O catálogo tem seis questões: as três progressivas originais, preservadas byt
 
 Execute `npm run content:generate` depois de editar fontes. Esse comando não acessa banco nem provedores de IA. As entradas máximas são públicas e geradas de forma reproduzível; o maior tamanho `n` previsto em cada enunciado é coberto. Os testes não geram respostas esperadas executando a própria referência.
 
+A normalização CRLF → LF ocorre somente na leitura de enunciados/starters para o catálogo; não edita os arquivos do usuário e não altera entradas ou saídas de fixtures stdio. Se uma versão já tiver sido persistida com outro formato de quebras de linha, o seed imutável continuará recusando a diferença: ela exige tratamento explícito de versão, não sobrescrita automática.
+
 ## Verificação e privacidade
 
 ```bash
@@ -27,9 +29,9 @@ npx vitest run packages/core/test/classic-seeds.test.ts packages/judge/test/clas
 
 Os testes verificam schemas, exemplos, metadados, limites, ausência de testes ocultos/referências nos bundles públicos e o hash dos três seeds originais. Oráculos independentes conferem as saídas dos casos pequenos. O judge local executa de fato as seis referências, os seis starters e quatro implementações deliberadamente erradas para conferir os desempates, a continuidade dos intervalos e a contagem de rotas.
 
-Esses seeds são material de treino aberto: não oferecem testes secretos resistentes à memorização de fixtures. `hiddenCases` é vazio e `referenceSolutions` também é vazio no pacote público; não rotular como privado qualquer conteúdo já exposto no Git.
+Os pacotes versionados são material de treino aberto: `hiddenCases` é vazio e `referenceSolutions` também é vazio no pacote público. Não rotular como privado qualquer conteúdo já exposto no Git. Para a avaliação oficial, casos novos são preparados e mantidos fora do repositório; isso não torna as referências públicas secretas nem elimina a possibilidade de estudar suas soluções.
 
-O script de seed Supabase reconhece as referências públicas desses slugs como fallback para o armazenamento interno, preservando a prioridade de arquivos privados explicitamente configurados. O verificador de bundles verifica as clássicas com os casos e referências públicos e continua exigindo os artefatos externos privados das três progressivas. Nenhum desses scripts deve ser confundido com um reset: versões já existentes não são sobrescritas.
+O script de seed Supabase reconhece as referências públicas desses slugs como fallback para o armazenamento interno, preservando a prioridade de arquivos privados explicitamente configurados. Tanto o seed quanto o verificador de bundles agora exigem artefatos externos privados para **as seis questões**, com cobertura em cada estágio e referências nas duas linguagens. Foram preparados nove casos novos para cada clássica; veja [Preparação dos testes privados](private-seed-preparation.md). Nenhum desses scripts é um reset: versões já existentes não são sobrescritas.
 
 ## Integração
 

@@ -9,6 +9,11 @@ test-results/
 .sessions/
 .env
 .env.local
+.env.*.local
+*.private.json
+*.reference.ts
+*.reference.py
+silogium-private-bundles/
 .vercel/
 supabase/.temp/
 .turbo/

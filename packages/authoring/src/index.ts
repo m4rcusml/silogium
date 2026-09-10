@@ -1,5 +1,6 @@
 export * from "./types.js";
 export * from "./durable-jobs.js";
+export * from "./memory-queue.js";
 export * from "./conversation.js";
 export * from "./module.js";
 export * from "./editorial.js";

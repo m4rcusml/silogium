@@ -56,6 +56,8 @@ export type LicensedExerciseSource = {
 
 export type ValidationReport = {
   valid: boolean;
+  /** Retryable infrastructure failure, not evidence that the generated problem is defective. */
+  infrastructureError?: boolean;
   checks: Array<{ name: string; passed: boolean; message?: string }>;
   warnings?: string[];
   coverage?: import("./quality.js").QualityCoverage;

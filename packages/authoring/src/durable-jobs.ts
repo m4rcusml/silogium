@@ -1,5 +1,5 @@
 import type { Actor } from "@silogium/core";
-import type { ConversationTurn } from "./conversation.js";
+import type { Conversation, ConversationTurn } from "./conversation.js";
 import type { EditorialRecord } from "./editorial-types.js";
 import type { AuthoringJob, GeneratedPackage, SearchCandidate } from "./types.js";
 
@@ -17,7 +17,7 @@ export type JobOutcome = { job: AuthoringJob; effects: JobEffects; turn?: Conver
 
 /** All writes are fenced by the lease token. finish commits effects + terminal job atomically. */
 export interface AuthoringQueue {
-  enqueue(job: AuthoringJob, actor: Actor, turn?: ConversationTurn): Promise<void>;
+  enqueue(job: AuthoringJob, actor: Actor, turn?: ConversationTurn, newConversation?: Conversation): Promise<void>;
   confirm(jobId: string, actorId: string): Promise<boolean>;
   claim(workerId: string, leaseSeconds: number): Promise<JobLease | null>;
   heartbeat(lease: JobLease, leaseSeconds: number): Promise<boolean>;
@@ -29,6 +29,13 @@ export interface AuthoringQueue {
 
 export class JobLeaseLost extends Error { constructor() { super("O processamento foi retomado por outro worker."); } }
 export class PermanentAuthoringError extends Error {}
+function safeFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  if (error instanceof PermanentAuthoringError && message.startsWith("Sua cota diária")) return "Sua cota diária de IA terminou. Tente novamente amanhã.";
+  if (/rascunho mudou|editorial revision conflict/i.test(message)) return "O rascunho mudou durante o processamento. Reabra a versão atual antes de pedir outro refinamento.";
+  // Provider/transport errors can contain headers, prompts, URLs or response bodies.
+  return "Não foi possível concluir o processamento. Confira suas questões e tente novamente; se persistir, procure o administrador.";
+}
 export type JobWork = {
   effects: JobEffects;
   step<T>(key: string, compute: () => Promise<T>): Promise<T>;
@@ -79,9 +86,8 @@ export class AuthoringWorker {
       return await this.queue.finish(lease, outcome) ? "completed" : "lease_lost";
     } catch (error) {
       if (lost || error instanceof JobLeaseLost) return "lease_lost";
-      const message = error instanceof Error ? error.message : "Falha no processamento.";
       // A lost response after COMMIT is harmless: retry's old token cannot change the terminal job.
-      return await this.queue.retry(lease, message.slice(0, 2_000), error instanceof PermanentAuthoringError) ? "retry" : "lease_lost";
+      return await this.queue.retry(lease, safeFailure(error), error instanceof PermanentAuthoringError) ? "retry" : "lease_lost";
     } finally { clearInterval(timer); }
   }
 }

@@ -2,6 +2,7 @@ import { buildCandidateMetadata, buildProblemMetadata, canonicalExternalUrl, can
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { AuthoringJob, AuthoringRepository, GeneratedPackage, SearchCandidate } from "./types.js";
 import type { EditorialRecord, EditorialReview } from "./editorial-types.js";
+import type { JobOutcome } from "./durable-jobs.js";
 
 function withMetadata(problem: ProblemDefinition): ProblemDefinition {
   return { ...problem, metadata: problem.metadata ?? buildProblemMetadata(problem) };
@@ -138,6 +139,10 @@ export class MemoryAuthoringRepository implements AuthoringRepository {
   }
 
   async saveExternalCandidates(actor: Actor, candidates: SearchCandidate[]): Promise<void> {
+    this.storeExternalCandidates(actor, candidates);
+  }
+
+  private storeExternalCandidates(actor: Actor, candidates: SearchCandidate[]): void {
     const externalCandidates = this.externalCandidates ??= new Map();
     const stored = externalCandidates.get(actor.id) ?? new Map<string, SearchCandidate>();
     for (const candidate of candidates) {
@@ -160,6 +165,10 @@ export class MemoryAuthoringRepository implements AuthoringRepository {
   }
 
   async savePackage(value: GeneratedPackage): Promise<void> {
+    this.storePackage(value);
+  }
+
+  private storePackage(value: GeneratedPackage): void {
     if (this.packages.has(value.problem.id) || seedProblems.some((problem) => problem.id === value.problem.id)) throw new Error("A questão já existe. Use uma revisão para preservar o histórico.");
     value.problem = withMetadata(value.problem);
     if (value.problem.provenance.kind === "licensed_import") {
@@ -179,6 +188,26 @@ export class MemoryAuthoringRepository implements AuthoringRepository {
     this.remember(value);
     if (value.problem.status === "pending_review") this.openReview(value);
     if (value.problem.status === "published") this.publishedPackages.set(value.problem.id, structuredClone(value));
+  }
+
+  /** Synchronous memory transaction: no await between validation, content and terminal job. */
+  commitQueuedOutcome(outcome: JobOutcome, actor: Actor): void {
+    const { effects, job } = outcome;
+    if (job.actorId !== actor.id || Object.values(effects).filter((value) => value !== undefined).length > 1) throw new Error("Invalid job effects.");
+    if (effects.package) {
+      if (problemOwnerId(effects.package.problem) !== actor.id) throw new Error("Package ownership mismatch.");
+      this.storePackage(effects.package);
+    }
+    if (effects.editorial) {
+      const { record, expectedRevision } = effects.editorial;
+      const owner = this.packages.get(record.problemId);
+      const records = this.editorialRecords ??= new Map();
+      if (!owner || (problemOwnerId(owner.problem) !== actor.id && actor.role !== "admin")) throw new Error("Editorial access denied.");
+      if ((records.get(record.problemId)?.revision ?? 0) !== expectedRevision || record.revision !== expectedRevision + 1) throw new Error("Editorial revision conflict.");
+      records.set(record.problemId, structuredClone(record));
+    }
+    if (effects.candidates) this.storeExternalCandidates(actor, effects.candidates);
+    this.jobs.set(job.id, structuredClone(job));
   }
 
   async saveRevision(value: GeneratedPackage, actor: Actor): Promise<GeneratedPackage> {

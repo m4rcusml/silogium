@@ -124,7 +124,7 @@ export function loadSeedPackages(root: string, directory: string | undefined, re
       const publicRef = resolve(root, "reference-solutions", runtime, `${problem.slug}.${extension}`);
       const legacy = runtime === "typescript" && problem.slug === "rede-de-armarios" ? resolve(root, "reference-solutions/typescript/question1.ts") : undefined;
       const ref = [privateRef, publicRef, legacy].find((path) => path && existsSync(path));
-      if (ref) references[runtime] = readFileSync(ref, "utf8");
+      if (ref) references[runtime] = readFileSync(ref, "utf8").replace(/\r\n/g, "\n");
     }
     return { problem, bundle: validateSeedBundle(problem, { ...visible, hiddenCases: hidden.hiddenCases ?? [], referenceSolutions: references }, requirePrivate) };
   });
