@@ -80,6 +80,7 @@ create function public.authoring_queue(p_action text, p_payload jsonb) returns j
 language plpgsql security definer set search_path = '' as $$
 declare
   task private.authoring_tasks; result jsonb; expired_id uuid;
+  final_leases uuid[] := '{}';
   requested_id uuid := (p_payload->>'jobId')::uuid;
   token uuid := (p_payload->>'token')::uuid;
   milliseconds integer := (p_payload->>'deferMs')::integer;
@@ -106,6 +107,15 @@ begin
     end if;
     p_payload := p_payload || '{"permanent":true,"refund":true}'::jsonb;
   end if;
+  if p_action = 'claim' then
+    -- Remember the previous state under lock: only worker-death transitions may
+    -- be refunded by claim. Include still-valid final leases so expiry between
+    -- these queries is handled without sweeping explicit business failures.
+    for expired_id in select job_id from private.authoring_tasks
+      where state = 'leased' and attempts >= 3 for update skip locked loop
+      final_leases := array_append(final_leases, expired_id);
+    end loop;
+  end if;
   result := public.authoring_queue_v1(p_action, p_payload);
   if p_action = 'reserve_ai' and result = 'true'::jsonb and not task.ai_reserved then
     update private.authoring_tasks set ai_quota_day = current_date where job_id = requested_id;
@@ -113,10 +123,10 @@ begin
     and exists(select 1 from private.authoring_tasks where job_id = requested_id and state = 'failed') then
     perform private.refund_authoring_quota(requested_id);
   elsif p_action = 'claim' then
-    -- Handles a worker dying on its final attempt; idempotent even after response loss.
-    for expired_id in select job_id from private.authoring_tasks where state = 'failed' and ai_reserved and not ai_refunded
-      and ai_quota_day is not null and lease_token is null and updated_at > now() - interval '2 days'
-      and attempts >= 3 for update skip locked loop
+    -- The failure and refund commit together. Already-failed jobs retain the
+    -- refund decision supplied by retry, including refund=false on attempt 3.
+    for expired_id in select job_id from private.authoring_tasks
+      where job_id = any(final_leases) and state = 'failed' loop
       perform private.refund_authoring_quota(expired_id);
     end loop;
   end if;

@@ -58,7 +58,17 @@ create table public.problems (
 );
 create unique index problems_source_url_unique on public.problems(source_url) where source_url is not null;
 create index problems_catalog_idx on public.problems(status, visibility, updated_at desc);
-create index problems_title_trgm_idx on public.problems using gin(title gin_trgm_ops);
+-- Supabase may already have pg_trgm in extensions, outside the migration's
+-- search_path. Preserve its installation schema and qualify the operator class.
+do $$
+declare trigram_schema text;
+begin
+  select n.nspname into strict trigram_schema
+  from pg_catalog.pg_extension e join pg_catalog.pg_namespace n on n.oid = e.extnamespace
+  where e.extname = 'pg_trgm';
+  execute format('create index problems_title_trgm_idx on public.problems using gin(title %I.gin_trgm_ops)', trigram_schema);
+end;
+$$;
 create index problems_tags_idx on public.problems using gin(tags);
 
 create table public.problem_versions (

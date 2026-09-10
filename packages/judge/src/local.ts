@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { closeSync, existsSync, openSync, readSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -22,6 +22,18 @@ function locateEsbuildCli(): string {
     current = parent;
   }
   throw new Error("Compilador TypeScript local não encontrado. Instale a dependência esbuild.");
+}
+
+function esbuildCommand(cli: string): [string, string[]] {
+  // esbuild's postinstall may replace its JS launcher with the native binary.
+  // Detect the actual file, preserving JS overrides and Windows' JS launcher.
+  const header = Buffer.alloc(4);
+  const descriptor = openSync(cli, "r");
+  try { readSync(descriptor, header, 0, header.length, 0); }
+  finally { closeSync(descriptor); }
+  const native = header.subarray(0, 2).toString("ascii") === "MZ"
+    || ["7f454c46", "feedface", "feedfacf", "cefaedfe", "cffaedfe", "cafebabe", "bebafeca"].includes(header.toString("hex"));
+  return native ? [cli, []] : [process.execPath, [cli]];
 }
 
 function runtimeCommand(language: RuntimeDefinition["language"], script: string): [string, string[]] {
@@ -177,8 +189,9 @@ export class LocalJudgeAdapter implements Judge {
           const typescriptPath = join(directory, "solution.ts");
           await writeFile(typescriptPath, request.source, "utf8");
           // Compilar em um processo separado exclui o cold start do orçamento de cada caso.
-          const compiled = await runProcess(process.execPath, [
-            locateEsbuildCli(),
+          const [compiler, compilerArgs] = esbuildCommand(locateEsbuildCli());
+          const compiled = await runProcess(compiler, [
+            ...compilerArgs,
             typescriptPath,
             "--format=esm",
             "--platform=node",
