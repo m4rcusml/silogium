@@ -1,6 +1,6 @@
 # Beta fechado — implementação e ativação
 
-Atualizado em 10/09/2026. O código deste beta está preparado; **não confundir com o estado já publicado** em [DEPLOYMENT](./DEPLOYMENT.md). As migrações 014/015 e o worker sob demanda ainda precisam de ativação controlada. Não foram feitas gerações reais nem novos deploys Modal nesta implementação.
+Atualizado em 10/09/2026. As migrações 014/015 foram aplicadas, o worker sob demanda foi publicado e uma criação real privada TypeScript passou até validação. O pedido encontrou questões semelhantes, exigiu confirmação, preservou checkpoints durante o processamento e consumiu exatamente uma criação diária após validação. A questão ficou ausente do catálogo público. A conta técnica de email não certifica o OAuth GitHub. **Conferir o estado da web publicada** em [DEPLOYMENT](./DEPLOYMENT.md); os resultados abaixo não equivalem ao benchmark completo ou à homologação integral de isolamento.
 
 ## Regras acordadas
 
@@ -71,7 +71,7 @@ Continuam fora desta rodada: benchmark cego completo de 40 prompts, comprovaçã
 - Vitest: **634 testes aprovados em 57 arquivos**, com dois workers. Dependências externas simuladas; nenhuma geração real de IA ou execução Modal. Typechecks dos workspaces aprovados.
 - Build final de produção web/CLI aprovado, isolado em `.next-build`. Smoke do servidor de produção aprovado nos três cenários sem credenciais: jobs anônimo e bearer retornam 401; autoria retorna 400, sem fallback indevido para demonstração local.
 - Playwright desktop/mobile das áreas alteradas: 54 de 56 cenários aprovados na rodada conjunta. As duas falhas eram uma fixture de refinamento que respondia sucesso antes do retry do usuário; depois de corrigida, o cenário passou em quatro reexecuções (duas por dispositivo). Os 18 cenários de beta e os 14 de descoberta passaram na rodada conjunta. Capturas de Studio/admin verificadas visualmente.
-- A suíte completa de 210 cenários **não foi concluída**: a tentativa inicial foi interrompida após 39 aprovações, uma falha e um skip. A regressão real de confirmação encontrada foi corrigida e revalidada separadamente; não declarar toda a suíte verde.
+- A suíte completa local atual descobriu **212 cenários**: 210 passaram, um foi ignorado por ser exclusivo de mobile e um falhou por texto cortado no filtro de progresso em 1024 px durante carregamento. O mínimo das colunas foi corrigido de 200 para 260 px; os **10 testes de layout passaram depois da correção**, sem alterar testes/textos/fonte/padding. A suíte completa não foi repetida localmente após essa linha CSS.
 - Controller/worker: **41 testes Python aprovados** (21 do judge e 20 do worker) e importação do SDK Modal 1.5.5 com rede bloqueada. Não comprovam execução no Modal real.
-- Servidor de testes na porta 3100 encerrado ao finalizar; processo do usuário na porta 3000 preservado. Nenhuma credencial nova criada e nenhum commit, push ou deploy nesta etapa.
+- Servidor de testes na porta 3100 encerrado ao finalizar; processo do usuário na porta 3000 preservado. Secrets worker/wakeup e credenciais técnicas do smoke foram guardados somente no vault externo solicitado pelo proprietário. O código do beta foi comitado e enviado ao GitHub; a publicação da web exige seu próprio gate.
 - A versão publicada, evidências e bloqueios operacionais devem ser atualizados em [DEPLOYMENT](./DEPLOYMENT.md) a cada publicação.

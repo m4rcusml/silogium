@@ -9,23 +9,26 @@ local não são integrações implementadas neste repositório.
 
 ## Estado publicado e evidências
 
-**Beta preparado localmente, ainda não publicado:** lista de espera, duas criações
-validadas por dia, convites administrativos, pausas preservando checkpoints e
-worker sob demanda. As migrações 014/015 foram exercitadas em transações revertidas;
-a tabela abaixo continua descrevendo a produção anterior. As travas nativas do
-Modal foram conferidas após ajuste: US$ 30 de limite bruto e créditos, resultando
-em US$ 0 líquido pelo padrão documentado. A ativação operacional ainda precisa
-ser verificada. Procedimento, regras e limite interno de US$ 1 para o smoke em
+**Beta em ativação controlada; a web ainda não foi atualizada:** lista de espera,
+duas criações validadas por dia, convites administrativos e pausas preservando
+checkpoints. As migrações 014/015 foram aplicadas após dry-run exato, preservando
+as seis questões e a conta administradora. O worker sob demanda foi publicado;
+autenticação do wake e leitura de consumo no contexto remoto passaram. Uma criação
+real privada TypeScript passou até validação, com confirmação de similares e consumo
+único da cota. A publicação da nova web ainda é um gate pendente. As travas
+nativas do Modal foram conferidas após ajuste: US$ 30 de limite bruto e créditos,
+resultando em US$ 0 líquido pelo padrão documentado. Procedimento e teto interno
+de US$ 1 para a rodada em
 [beta fechado](./beta-closed.md).
 
 | Componente | Estado verificado em 10/09/2026 |
 | --- | --- |
 | Vercel | Production READY, commit `624489f1744189b59156e711165085627afd2c7a`; deployment `dpl_HEwWNacuR4f1NizwPT48hgCFpjJP` |
-| Supabase | Projeto `wvomqkbnwenathgdqlwk`, região `sa-east-1`; 13 migrações aplicadas, até `202609100013_practice_projection_arguments.sql` |
+| Supabase | Projeto `wvomqkbnwenathgdqlwk`, região `sa-east-1`; 15 migrações aplicadas, até `202609100015_operational_capacity.sql`; 400 pgTAP pós-migração aprovados em transações revertidas |
 | Catálogo | 6 questões publicadas: 3 progressivas e 3 clássicas, com TypeScript e Python; versões e bundles privados persistidos |
 | GitHub OAuth | Login validado; conta `@m4rcusml` promovida explicitamente a administradora |
-| Modal | Controlador/judge v2 publicado, endpoint autenticado configurado na Vercel; execução isolada por caso |
-| Autoria por IA | `SILOGIUM_AUTHORING_ENABLED=false`; publicação/validação operacional do worker e liberação pública ainda pendentes |
+| Modal | Judge v2 republicado com limites de CPU/memória/concorrência do beta; worker `silogium-authoring` publicado, wake autenticado e leitura de consumo remota verificados |
+| Autoria por IA | `SILOGIUM_AUTHORING_ENABLED=false` na web; criação controlada privada validada; publicação da nova web ainda pendente |
 | Progresso oficial | `SILOGIUM_VERIFIED_JUDGE_POLICY` vazio; execução remota não é, sozinha, certificação para recompensas oficiais |
 
 A migração `202609100013_practice_projection_arguments.sql` corrigiu a ambiguidade
