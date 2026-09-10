@@ -1,7 +1,11 @@
 # Groq no Silogium
 
-Atualizado em 10/09/2026. Integração disponível para avaliação local; **não é
-aprovação de qualidade nem autorização para ligar autoria pública**.
+Atualizado em 10/09/2026. O worker no Modal já concluiu **uma criação privada
+clássica TypeScript com Groq e judge remoto**, até validação e consumo único da
+cota diária. A web publicada habilita autoria assistida **somente para participantes
+aprovados do beta e administradores**, dentro da capacidade operacional vigente.
+Isso **não é aprovação de qualidade geral nem liberação irrestrita ao público**.
+O teto operacional vigente é registrado em [DEPLOYMENT](./DEPLOYMENT.md).
 
 ## Configuração e fronteiras
 
@@ -136,7 +140,42 @@ aceita `--diagnostics=<relatório JSON>`; não executa código nem publica quest
 
 ### Evidência e limitações desta implementação
 
-Verificação final local desta revisão:
+#### Rodada controlada do beta — 10/09/2026
+
+- **15 migrações aplicadas no Supabase hospedado**, até
+  `202609100015_operational_capacity.sql`, incluindo admissão Groq, acesso beta,
+  cota de criação e capacidade operacional.
+- Worker durável **publicado no app Modal `silogium-authoring`**, com segredos
+  separados do judge e da web. Uma criação real privada clássica TypeScript
+  encontrou questões semelhantes, aguardou confirmação e percorreu Groq,
+  checkpoints, fila/worker e judge remoto até ficar validada.
+- A criação consumiu **exatamente uma unidade da cota diária** após validação e
+  permaneceu fora do catálogo público. Foi um smoke controlado com conta técnica,
+  não uma nova homologação do login GitHub nem avaliação editorial independente.
+- [CI `34542160203`](https://github.com/m4rcusml/silogium/actions/runs/34542160203)
+  aprovado no SHA `bd2ea46e47dd65706c731c390f0788416b5177a0`: **634 testes Vitest / 57
+  arquivos**, **400 verificações pgTAP / 15 suítes**, **41 testes Python**, tipos,
+  build, proteção de produção e **211 cenários de navegador aprovados / um skip
+  esperado**. O CI usa simulador/doubles e banco descartável; não fez essa
+  geração real. Veja [escopo dos checks](./ci-checks.md).
+- Web confirmada **READY** no mesmo SHA, deployment
+  `dpl_dRobAyXFBV13kLGHC9RcT7gTyveg`, com alias
+  [silogium.vercel.app](https://silogium.vercel.app). Fora do CI, os probes de
+  aprovado/pendente/revogado passaram: Studio disponível para aprovado;
+  funcionalidades assistidas indisponíveis e POST 403 para pendente/revogado.
+  A conta técnica, questão privada, job e token do smoke foram removidos pelos
+  IDs exatos, preservando as seis questões iniciais e a conta administradora.
+
+O smoke comprova um caminho real até validação, não todos os modos/linguagens,
+qualidade generalizável ou homologação integral da operação. Morte nativa do
+container Modal durante uma chamada, OOM comprovado e benchmark cego de 40
+prompts ainda não foram demonstrados. Checkpoints observados não equivalem a
+um ensaio de recuperação após matar o container remoto.
+
+#### Histórico da integração antes da rodada do beta
+
+Verificação local anterior, preservada como histórico e não como resultado do CI
+atual:
 
 - `npm run typecheck`: todos os workspaces aprovados.
 - `npx vitest run --maxWorkers=2`: **522 testes / 49 arquivos aprovados**.
@@ -147,7 +186,8 @@ Verificação final local desta revisão:
   produziam JavaScript inválido, então as cercas Markdown usam strings comuns.
 - Varredura de segredos em 379 arquivos do repositório e 71 arquivos públicos do
   build: nenhuma ocorrência das chaves locais nem dos padrões de chave privada.
-- PostgreSQL/pgTAP e execução Modal real **não executados neste ambiente**.
+- Naquela verificação local inicial, PostgreSQL/pgTAP e execução Modal real
+  **não haviam sido executados**; a evidência posterior está na seção acima.
 
 As chamadas reais da conta Free responderam 200 tanto na criação por fases quanto
 na busca. Foram observados também 400 `json_validate_failed`, gabarito incorreto,
@@ -170,10 +210,14 @@ clássica Python, por exemplo, tinha referência correta nesses casos, mas foi
 recusada pelo pacote original por um espaço inicial indevido em uma saída esperada.
 Esse pacote permanece não aprovado; não corrigimos o gabarito à revelia do judge.
 
-Antes de ativar produção ainda falta:
+Homologações ainda pendentes, mesmo após o smoke controlado:
 
-- Aplicar migrações até 012 e executar pgTAP/concorrência/recuperação no banco real.
-- Rodar o worker com Modal e verificar limites/isolamento reais.
+- Completar ensaio de recuperação após morte nativa de container Modal, retries
+  e checkpoints sob falhas reais. Testes transacionais e doubles não substituem
+  esse ensaio, embora as migrações e o worker já estejam publicados.
+- Completar isolamento, limites, carga, cold starts, bundles completos e custo
+  do judge remoto, incluindo **OOM comprovado**; exit code 137/SIGKILL isolado
+  não identifica a causa do encerramento.
 - Benchmark cego de pelo menos 40 pedidos variados (10 por célula:
   clássico/progressivo × TypeScript/Python), com oráculos independentes e revisão
   de enunciado, starter, licença e limites; meta proposta 80% na primeira tentativa
@@ -183,7 +227,12 @@ Antes de ativar produção ainda falta:
 - Tratar pacotes cujo contexto excede o orçamento por edição manual ou uma futura
   estratégia de conversão segmentada auditável; não remover arquivos da licença.
 
-Mantenha `SILOGIUM_AUTHORING_ENABLED=false` em produção até concluir esses gates.
+A autoria está habilitada para o beta aprovado; qualquer ampliação do teto da
+rodada depende da confirmação operacional registrada em [DEPLOYMENT](./DEPLOYMENT.md).
+Worker publicado e CI aprovado não alteram esses controles automaticamente.
+Essa liberação limitada não deve ser apresentada como conclusão das homologações
+acima. Pesquisa web continua experimental/opt-in, e o smoke não altera a política
+de progresso oficial.
 
 Referências oficiais consultadas: [Structured Outputs](https://console.groq.com/docs/structured-outputs),
 [browser search](https://console.groq.com/docs/tool-use/built-in-tools/browser-search),

@@ -46,6 +46,14 @@ São necessárias duas camadas:
 
 Para a rodada autorizada de testes, `workloadLimitMicrousd=1000000` estabelece **US$ 1 de teto interno**, mantendo os valores reais de crédito e limites nativos na atestação. Esse teto interno não modifica o cartão, não é um limite de cobrança do Modal e não cobre por si só builds, armazenamento ou outros aplicativos. Toda atividade real exige as travas nativas e acompanhamento do consumo. Não iniciar testes em lote.
 
+A rodada foi concluída em 10/09/2026. Após criação privada validada, probes publicados
+de aprovado/espera/revogado, teste delimitado de recuperação e limpeza dos dados técnicos,
+o operador elevou **somente o teto interno para US$ 30**, a capacidade gratuita já
+confirmada. Preservou o consumo e as reservas do ciclo e renovou a observação real.
+A atestação expira em **30/09/2026 às 21h de Brasília**; outro ciclo exige nova
+conferência, não simples renovação automática. Consumo observado e ressalvas em
+[DEPLOYMENT](./DEPLOYMENT.md#capacidade-financeira-verificada).
+
 A medida interna é consumo bruto observado de todo o workspace **mais todas as reservas do ciclo**. Pode contar parte do consumo duas vezes e pausar cedo. Não é uma fatura nem saldo exato, e não deve ser apresentada assim. Veja recursos, fórmula e limitações em [worker durável](./authoring-worker.md).
 
 Mesmo em desenvolvimento, configurar o judge remoto exige o ledger Supabase. Não existe bypass de reservas usando o endpoint Modal junto da demonstração em memória; ela continua disponível somente com execução local.
@@ -67,11 +75,12 @@ Continuam fora desta rodada: benchmark cego completo de 40 prompts, comprovaçã
 ## Verificação e continuidade
 
 - Migrações: `202609100014_beta_access_and_creation_quota.sql` e `202609100015_operational_capacity.sql`.
-- SQL: **400 verificações aprovadas em 15 suítes**, incluindo acesso/RLS, beta, capacidade, fila e Groq. Executadas em transações revertidas no PostgreSQL hospedado; **isso não aplica as migrações em produção**. Permanecem seis questões e um usuário reais.
+- SQL: **400 verificações aprovadas em 15 suítes**, incluindo acesso/RLS, beta, capacidade, fila e Groq. Rodada inicial transacional e nova rodada após aplicar realmente as migrações 014/015; fixtures de teste revertidas no PostgreSQL hospedado. Permanecem seis questões e um usuário reais após limpar a conta técnica do smoke.
 - Vitest: **634 testes aprovados em 57 arquivos**, com dois workers. Dependências externas simuladas; nenhuma geração real de IA ou execução Modal. Typechecks dos workspaces aprovados.
 - Build final de produção web/CLI aprovado, isolado em `.next-build`. Smoke do servidor de produção aprovado nos três cenários sem credenciais: jobs anônimo e bearer retornam 401; autoria retorna 400, sem fallback indevido para demonstração local.
 - Playwright desktop/mobile das áreas alteradas: 54 de 56 cenários aprovados na rodada conjunta. As duas falhas eram uma fixture de refinamento que respondia sucesso antes do retry do usuário; depois de corrigida, o cenário passou em quatro reexecuções (duas por dispositivo). Os 18 cenários de beta e os 14 de descoberta passaram na rodada conjunta. Capturas de Studio/admin verificadas visualmente.
 - A suíte completa local atual descobriu **212 cenários**: 210 passaram, um foi ignorado por ser exclusivo de mobile e um falhou por texto cortado no filtro de progresso em 1024 px durante carregamento. O mínimo das colunas foi corrigido de 200 para 260 px; os **10 testes de layout passaram depois da correção**, sem alterar testes/textos/fonte/padding. A suíte completa não foi repetida localmente após essa linha CSS.
+- No CI do commit publicado `bd2ea46`, a suíte completa passou: **211 Playwright aprovados e um ignorado**, além dos 634 Vitest, 400 pgTAP e 41 Python. A web publicada passou pelos probes HTTP de aprovado/espera/revogado, com bloqueio remoto e privacidade preservados. O problema no primeiro probe era a confusão entre contagem de casos ocultos e conteúdo privado; o helper foi corrigido com regressão offline, sem mudança na aplicação.
 - Controller/worker: **41 testes Python aprovados** (21 do judge e 20 do worker) e importação do SDK Modal 1.5.5 com rede bloqueada. Não comprovam execução no Modal real.
-- Servidor de testes na porta 3100 encerrado ao finalizar; processo do usuário na porta 3000 preservado. Secrets worker/wakeup e credenciais técnicas do smoke foram guardados somente no vault externo solicitado pelo proprietário. O código do beta foi comitado e enviado ao GitHub; a publicação da web exige seu próprio gate.
+- Servidor de testes na porta 3100 encerrado ao finalizar; processo do usuário na porta 3000 preservado. Secrets worker/wakeup e credenciais técnicas do smoke foram guardados somente no vault externo solicitado pelo proprietário. Conta, questão privada, job e token técnicos foram removidos após os probes; credenciais técnicas marcadas revogadas. Código comitado/enviado ao GitHub e web publicada somente após aprovação do CI exato.
 - A versão publicada, evidências e bloqueios operacionais devem ser atualizados em [DEPLOYMENT](./DEPLOYMENT.md) a cada publicação.

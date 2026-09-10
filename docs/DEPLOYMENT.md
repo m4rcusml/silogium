@@ -1,35 +1,58 @@
 # Silogium — deploy e operação
 
 Atualizado em 10/09/2026. **Publicado em [silogium.vercel.app](https://silogium.vercel.app).**
-Catálogo, login e execução remota estão configurados; autoria pública por IA e
-reconhecimento oficial de progresso continuam desativados. Groq foi escolhido;
+Catálogo, login, execução remota e autoria Groq estão configurados. Recursos remotos
+exigem aprovação no beta; qualquer pessoa pode fazer login e entrar na espera.
+O reconhecimento oficial de progresso continua desativado. Groq foi escolhido;
 a integração e os limites estão descritos em [Groq](./groq-integration.md).
 Este guia substitui a proposta antiga: Ollama, OpenRouter, Gemini e judge Docker
 local não são integrações implementadas neste repositório.
 
 ## Estado publicado e evidências
 
-**Beta em ativação controlada; a web ainda não foi atualizada:** lista de espera,
+**Beta publicado e verificado:** lista de espera,
 duas criações validadas por dia, convites administrativos e pausas preservando
 checkpoints. As migrações 014/015 foram aplicadas após dry-run exato, preservando
 as seis questões e a conta administradora. O worker sob demanda foi publicado;
 autenticação do wake e leitura de consumo no contexto remoto passaram. Uma criação
 real privada TypeScript passou até validação, com confirmação de similares e consumo
-único da cota. A publicação da nova web ainda é um gate pendente. As travas
+único da cota. A nova web passou pelos probes HTTP de participante aprovado,
+lista de espera e revogação. As travas
 nativas do Modal foram conferidas após ajuste: US$ 30 de limite bruto e créditos,
-resultando em US$ 0 líquido pelo padrão documentado. Procedimento e teto interno
-de US$ 1 para a rodada em
-[beta fechado](./beta-closed.md).
+resultando em US$ 0 líquido pelo padrão documentado. O ensaio usou teto interno de
+US$ 1; após validar e limpar os dados técnicos, o teto interno passou para os
+US$ 30 gratuitos confirmados, sem aumentar limites nativos ou contratar serviços.
+Procedimento em [beta fechado](./beta-closed.md).
 
 | Componente | Estado verificado em 10/09/2026 |
 | --- | --- |
-| Vercel | Production READY, commit `624489f1744189b59156e711165085627afd2c7a`; deployment `dpl_HEwWNacuR4f1NizwPT48hgCFpjJP` |
+| Vercel | Production READY e alias conferido, commit `bd2ea46e47dd65706c731c390f0788416b5177a0`; deployment `dpl_dRobAyXFBV13kLGHC9RcT7gTyveg` |
 | Supabase | Projeto `wvomqkbnwenathgdqlwk`, região `sa-east-1`; 15 migrações aplicadas, até `202609100015_operational_capacity.sql`; 400 pgTAP pós-migração aprovados em transações revertidas |
 | Catálogo | 6 questões publicadas: 3 progressivas e 3 clássicas, com TypeScript e Python; versões e bundles privados persistidos |
 | GitHub OAuth | Login validado; conta `@m4rcusml` promovida explicitamente a administradora |
 | Modal | Judge v2 republicado com limites de CPU/memória/concorrência do beta; worker `silogium-authoring` publicado, wake autenticado e leitura de consumo remota verificados |
-| Autoria por IA | `SILOGIUM_AUTHORING_ENABLED=false` na web; criação controlada privada validada; publicação da nova web ainda pendente |
+| Autoria por IA | `SILOGIUM_AUTHORING_ENABLED=true`; Groq via worker sob demanda, somente administradores/participantes aprovados e dentro da capacidade gratuita |
 | Progresso oficial | `SILOGIUM_VERIFIED_JUDGE_POLICY` vazio; execução remota não é, sozinha, certificação para recompensas oficiais |
+
+### Capacidade financeira verificada
+
+- Ciclo Modal: `2026-09-01T00:00:00Z` até `2026-10-01T00:00:00Z`.
+  A atestação expira em **30/09/2026 às 21h de Brasília**. O operador deve conferir
+  créditos e limites do ciclo seguinte e registrar nova atestação; o cron de
+  observação não a renova automaticamente. Sem confirmação, pausar preservando trabalho.
+- Limites nativos conferidos na interface: bruto **US$ 30**, créditos **US$ 30**;
+  líquido padrão **US$ 0**, conforme [Modal Budgets](https://modal.com/docs/guide/budgets).
+  Nenhum limite nativo foi elevado nesta rodada; não foram criados volumes.
+- O teto conservador da aplicação passou de US$ 1 para **US$ 30** após os gates.
+  Consumo/reservas do mesmo ciclo foram preservados. Uma nova leitura remota real
+  confirmou disponibilidade de Groq e Modal, com fila vazia.
+- Último relatório, **10/09/2026 às 23:47:12 UTC**: uso bruto do workspace
+  **US$ 0,00301509**, cobrança líquida **US$ 0**. Baseline US$ 0,00133039;
+  aumento observado US$ 0,00168470. O relatório pode atrasar e inclui todos os apps
+  do workspace: não representa custo final/exclusivo da rodada nem garantia de fatura.
+- O ledger interno soma uso observado e reservas conservadoras e pode pausar
+  antes de consumir todo o crédito real. Administradores também estão sujeitos
+  a essa proteção. Não há fallback de IA pago.
 
 A migração `202609100013_practice_projection_arguments.sql` corrigiu a ambiguidade
 SQL da projeção de prática/perfil. A regressão foi validada transacionalmente,
@@ -37,13 +60,29 @@ com rollback dos dados de teste; depois do dry-run restrito à 013, a migração
 aplicada por CLI com TLS `verify-full`. A inspeção confirmou 13 migrações e as
 6 questões/versões preservadas. O perfil foi retestado no navegador, sem o alerta
 de erro, exibindo o progresso e a permissão administrativa normalmente. Essa
-correção somente de banco não mudou o SHA da web publicado acima.
+correção somente de banco precedeu a publicação do beta acima.
 
 Evidências já obtidas, com escopo delimitado:
 
-- CI do commit publicado: **555 testes Vitest, 21 Python, 255 pgTAP e 193 Playwright
-  aprovados; 1 Playwright ignorado**. Veja a [execução aprovada](https://github.com/m4rcusml/silogium/actions/runs/34510859534)
+- CI do commit publicado: **634 testes Vitest, 41 Python, 400 pgTAP e 211 Playwright
+  aprovados; 1 Playwright ignorado**. Veja a [execução aprovada](https://github.com/m4rcusml/silogium/actions/runs/34542160203)
   e o [guia de CI](./ci-checks.md).
+- **27 verificações agrupadas via HTTP na web do beta:** aprovado (7), espera (10)
+  e revogado (10). Confirmados catálogo com seis questões, privacidade do pacote,
+  resultado sem bundle/gabarito, cota criada uma vez, disponibilidade por recurso,
+  recusa de endpoints administrativos via token CLI comum e bloqueio 403 de autoria,
+  importação e execução para espera/revogado. Conta técnica de e-mail: não certifica
+  um novo login OAuth GitHub nem cliques no painel administrativo.
+- **Uma criação real Groq → worker Modal → judge → Supabase**, clássica TypeScript
+  privada: confirmação de similares, checkpoints, validação aprovada e consumo
+  de exatamente uma das duas criações diárias; zero reservas pendentes no fim.
+  A questão técnica, job, conta e token foram removidos definitivamente pelos
+  IDs/markers exatos depois dos probes. As seis questões e o administrador foram preservados.
+- **Recuperação por morte de processo local**, com adapter de fila real e PostgreSQL
+  via TLS: primeiro filho encerrado, lease de 31 segundos expirado, segundo filho
+  reaproveitou checkpoint sem recalculá-lo; lease antigo recusado. Transação revertida.
+  A conexão/transação do broker pai permaneceu viva: não comprova durabilidade após
+  COMMIT, morte do container Modal, morte da conexão nem disparo do cron remoto.
 - Os **26 testes pgTAP adicionais** da migração 013 passaram em uma transação
   revertida no banco hospedado, incluindo primeiro acesso, atualização, replay,
   snapshot obsoleto e isolamento entre usuários.
@@ -115,10 +154,10 @@ real; não há troca automática para outro serviço/modelo. A migração 012 j�
 
 ## Pendências antes de ampliar a liberação
 
-- Publicar e configurar o worker durável no Modal, com secrets próprios e limites
-  Groq; comprovar consumo da fila, recuperação após morte/lease expirado, retries,
-  checkpoints e cotas antes de habilitar pedidos públicos de IA. O judge publicado
-  não comprova que o worker de autoria está operacional.
+- Ampliar a homologação do worker já publicado: morte real do container Modal,
+  recuperação de dados previamente commitados e do agendamento remoto, falhas do
+  provedor e concorrência sob carga. O smoke real e o teste local de recuperação
+  acima permitem avaliar este beta limitado, não substituem essa homologação.
 - Executar o **benchmark cego de 40 prompts**: 10 para cada combinação de
   clássica/progressiva × TypeScript/Python. As metas propostas de 80% de aprovação
   inicial e 90% após correção não são resultados alcançados. Avaliar também clareza,
@@ -229,10 +268,11 @@ válidos para mudanças posteriores e não significam que todos precisem ser rep
    As variáveis `NEXT_PUBLIC_*` precisam estar corretas no build do ambiente.
 7. Homologar OAuth com duas contas, privacidade, tokens CLI, catálogo, execução,
    submissão e comportamento de falhas de infraestrutura.
-8. Para liberar a IA Groq: testar adapter, preparar secret
-   `silogium-authoring-worker`, publicar `modal deploy -m infra.worker.app`,
-   comprovar retomada após morte do worker e então habilitar a flag de autoria.
-   A função agenda uma consulta por minuto, com capacidade limitada; medir filas/custo.
+8. Para liberar a IA Groq em novo ambiente: testar adapter, preparar secrets
+   `silogium-authoring-worker` e `silogium-authoring-wakeup`, publicar
+   `modal deploy -m infra.worker.app`, homologar fila/retomada e um pedido real,
+   e então habilitar a flag de autoria. O processamento pesado é sob demanda;
+   uma recuperação leve roda a cada cinco minutos. Medir filas/custo.
 9. Homologar limites/segurança do judge real e somente então ativar a política
    oficial. Confirmar marcos de progresso com uma submissão nova e válida.
 10. Promover o commit aprovado e observar erros, consumo e filas. Não promover
@@ -274,8 +314,9 @@ injetados somente nos controladores/workers, nunca nas sandboxes candidatas.
 privados permanecem externos ao checkout. Os registros operacionais dos smokes
 ficam em `.sessions/deploy-20260910/`, sem senhas, tokens ou código submetido.
 
-A IA permanece desabilitada na hospedagem enquanto o worker e o provedor escolhido
-são homologados, sem retirar a integração local. Não é necessário contratar
+Neste beta a IA está habilitada somente para contas aprovadas e administradores;
+indisponibilidade de capacidade pausa novos trabalhos sem apagar checkpoints.
+Não é necessário contratar
 Redis, serviço de e-mail ou cobrança para os fluxos atuais.
 
 Em regressão, desabilitar novos pedidos de autoria, pausar o agendamento se necessário

@@ -2,7 +2,25 @@
 
 Workflow: `.github/workflows/checks.yml`.
 
-**Estado:** a versão anteriormente publicada teve CI aprovado, documentado em [DEPLOYMENT](./DEPLOYMENT.md). As alterações novas do [beta](./beta-closed.md) ainda exigem sua própria execução no GitHub; aprovação de um commit anterior não vale para elas. Este ambiente local não dispõe de Docker. Os testes SQL do beta foram executados no PostgreSQL hospedado em transações com rollback, sem aplicar permanentemente as migrações nem alterar os dados existentes.
+**Estado em 10/09/2026:** o [CI `34542160203`](https://github.com/m4rcusml/silogium/actions/runs/34542160203), do commit exato `bd2ea46e47dd65706c731c390f0788416b5177a0`, concluiu com sucesso os três jobs, incluindo as alterações do [beta](./beta-closed.md). Aprovação desse SHA não se estende automaticamente a commits posteriores nem comprova que a web correspondente já esteja publicada; veja [DEPLOYMENT](./DEPLOYMENT.md).
+
+## Resultado confirmado desta rodada
+
+- Aplicação: **634 testes Vitest em 57 arquivos**, **21 testes Python do judge** e **20 do worker**, tipos, build e proteção de produção aprovados.
+- Banco: **400 verificações pgTAP em 15 suítes**, com as 15 migrações aplicadas em um PostgreSQL 15 descartável do runner.
+- Navegador: **211 cenários aprovados e um skip esperado** em Chromium desktop/mobile, em 8,1 minutos. O skip é um cenário exclusivo de layout móvel no projeto desktop.
+
+O CI não usa contas cloud. Separadamente, na operação controlada de 10/09, foram aplicadas as **15 migrações no Supabase hospedado**, publicado o worker no Modal e validada uma criação privada clássica TypeScript com Groq e judge remoto, consumindo uma criação diária. Essa é evidência de um fluxo real, não de qualidade geral ou disponibilidade do novo deploy web.
+
+A disponibilidade foi verificada posteriormente, fora do CI: deploy Vercel
+`dpl_dRobAyXFBV13kLGHC9RcT7gTyveg` em **READY**, com o mesmo SHA acima e o alias
+[silogium.vercel.app](https://silogium.vercel.app). Os probes de acesso aprovado,
+pendente e revogado passaram (**7 + 10 + 10 verificações**): recursos assistidos
+disponíveis para o aprovado e bloqueados, inclusive com POST 403, para os demais.
+A autoria está habilitada somente para o beta aprovado e administradores;
+capacidade financeira e demais limites continuam descritos em [DEPLOYMENT](./DEPLOYMENT.md).
+
+O histórico local permanece distinto: sem Docker neste ambiente de desenvolvimento, os testes SQL do beta foram inicialmente executados contra PostgreSQL hospedado em transações com rollback. Esses testes não aplicaram permanentemente as migrações; a aplicação real posterior foi uma operação separada. A rodada completa local de navegador havia encontrado corte no filtro em 1024 px; após a correção e o recorte de layout aprovado, o CI acima passou pela suíte inteira.
 
 ## Jobs independentes
 
@@ -24,11 +42,12 @@ O job de banco lê `supabase/config.toml` sem alterá-lo. O comando `db start` i
 
 ## O que os testes não comprovam
 
-- IA fica em simulador ou doubles de teste: nenhuma geração OpenAI/Codex real, credencial ou sessão pessoal é usada.
+- IA fica em simulador ou doubles de teste: nenhuma geração Groq/OpenAI/Codex real, credencial ou sessão pessoal é usada no CI.
 - As suítes Python são `npm run test:judge:controller` e `npm run test:worker:controller`. Verificam controller e worker com APIs simuladas, sem provisionar Modal.
 - Um smoke adicional instala os SDKs fixados e importa as definições Modal com rede bloqueada; não constrói imagens nem acessa contas. Depois do build, um servidor Next de produção temporário, em porta loopback livre, comprova que requisições anônimas/Bearer/criação são recusadas sem configuração Supabase. Esse smoke não autentica ninguém nem escreve no banco.
 - O navegador usa desenvolvimento local isolado; não comprova OAuth real, configuração da Vercel ou funcionamento de provedores cloud.
 - Nenhuma execução com referências/testes privados externos do desenvolvedor é exigida no CI público. Os testes existentes criam seus próprios dados sintéticos ou consomem os fixtures públicos do repo.
+- Nem o CI nem o smoke privado de uma criação constituem benchmark cego de 40 prompts, prova de OOM, ensaio de morte de container Modal ou homologação completa de isolamento/carga/custo. Permanecem verificações separadas.
 
 ## Auditoria de permissões preparada
 

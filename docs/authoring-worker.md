@@ -40,9 +40,22 @@ A reserva usa o **teto de CPU de 1 núcleo**, não o mínimo solicitado de 0,125
 
 O consumo usa micros de dólar, arredondados para cima, e o maior valor entre o total bruto reportado e a soma de seu detalhamento; nunca usa o custo líquido após créditos como se fosse consumo zero. Sem leitura válida, ciclo atestado ou controles financeiros nativos, não acorda o worker pesado. O relatório pode atrasar: não é garantia de parar no último centavo e não substitui os limites de cobrança configurados diretamente no fornecedor. Se o contexto Modal não tiver permissão para ler faturamento, a verificação falha fechada; isso deve ser conferido na homologação, sem adicionar um token pessoal ao código.
 
+Na liberação deste beta, o teto interno de ensaio de US$ 1 foi substituído pelos
+US$ 30 gratuitos confirmados, preservando reservas/uso do ciclo. Nova leitura
+remota após a atestação confirmou disponibilidade, sem iniciar geração com fila
+vazia. Validade até `2026-10-01T00:00:00Z` (30/09 às 21h de Brasília); detalhes e
+consumo observado em [DEPLOYMENT](./DEPLOYMENT.md#capacidade-financeira-verificada).
+
 O bloqueio no PostgreSQL usa uma medida **deliberadamente conservadora**: consumo bruto observado de **todo o workspace**, incluindo outros aplicativos, **mais todas as reservas do Silogium criadas no ciclo**. Reservas concluídas ou com resultado desconhecido continuam somadas. Parte delas pode já estar incluída na observação do fornecedor: a duplicação é intencional enquanto não existe reconciliação confiável, e pode suspender novos trabalhos **antes** de os créditos reais acabarem. Esse número não é a fatura nem o saldo gratuito disponível e não deve ser mostrado como tal. Confirmar uma reserva não é reembolsá-la; ciclos novos exigem nova verificação financeira.
 
-## Execução pelo operador (não executada nesta implementação)
+## Execução pelo operador
+
+A primeira publicação e o smoke real foram concluídos em 10/09/2026. Os comandos
+abaixo são referência para manutenção/novos ambientes, não tarefas implicitamente pendentes.
+O ensaio de recuperação matou um processo filho local e reaproveitou o checkpoint
+com a fila PostgreSQL real após expirar seu lease. A transação do broker pai foi
+mantida e depois revertida: isso não certifica morte do container Modal, durabilidade
+após COMMIT nem recuperação pelo agendamento remoto.
 
 Na raiz, com variáveis injetadas pelo ambiente:
 

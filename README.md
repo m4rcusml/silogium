@@ -36,7 +36,11 @@ O repositório começou como um simulador de avaliações progressivas e agora �
 - Perfil editável, apresentação pública opt-in, metas semanais e conquistas pessoais condicionadas a evidência oficial; demo não concede conquistas.
 - Dicas, soluções e discussões com spoilers explícitos, moderação, denúncias e proteção contra aprovação de uma revisão obsoleta.
 
-O estado publicado está em [deploy e operação](docs/DEPLOYMENT.md): catálogo, OAuth e judge remoto já possuem verificação inicial. A autoria pública segue desativada até a ativação controlada do worker e das proteções financeiras. O código do [beta fechado](docs/beta-closed.md) inclui lista de espera, convites administrativos, duas criações validadas por dia e pausas com retomada. Isso não substitui homologação completa de isolamento, custos e recuperação. A demonstração em memória perde dados no reinício.
+Publicado em [silogium.vercel.app](https://silogium.vercel.app). Em 10/09/2026, o deploy web do commit `bd2ea46e47dd65706c731c390f0788416b5177a0` foi confirmado como **READY**, com os três jobs do [CI aprovados](https://github.com/m4rcusml/silogium/actions/runs/34542160203). As **15 migrações** estão aplicadas no Supabase e o **worker de autoria publicado no Modal**. A IA está habilitada somente para participantes aprovados do beta e administradores, dentro da capacidade operacional vigente. Contas pendentes ou revogadas continuam sem autoria assistida e execução remota; catálogo público e testes locais permanecem acessíveis.
+
+Uma criação privada clássica TypeScript percorreu Groq, fila/worker e judge remoto até validação, consumindo exatamente uma criação diária; não entrou no catálogo público. Os estados aprovado, pendente e revogado foram conferidos na web publicada. O teste técnico e seus dados temporários foram removidos, preservando as seis questões iniciais e a conta administradora. Consulte [deploy e operação](docs/DEPLOYMENT.md) para a evidência detalhada e o teto financeiro vigente.
+
+O [beta fechado](docs/beta-closed.md) inclui lista de espera, convites administrativos, duas criações validadas por dia e pausas com retomada. Uma criação aprovada não substitui o benchmark cego de 40 prompts nem a homologação completa de isolamento, OOM, custos e recuperação após morte de um container Modal. A demonstração em memória perde dados no reinício.
 
 O catálogo inicial contém **seis questões: três progressivas e três clássicas**, todas em TypeScript e Python. As três originais do simulador estão preservadas em `ProblemDefinitionV1`. As clássicas são **Pacotes complementares**, **Janelas de manutenção** e **Rotas da estação**. Os testes versionados no Git são públicos; não devem ser tratados como secretos. Testes oficiais privados das progressivas ficam fora do repositório e são enviados ao schema privado do Supabase. Veja [o conteúdo das clássicas](docs/classic-seeds.md).
 
@@ -51,6 +55,7 @@ packages/cli          executável silogium
 content               definições e fixtures públicas independentes de linguagem
 supabase              migrations, RLS, storage e filas pgmq
 infra/modal           endpoint e Sandbox do judge remoto
+infra/worker          worker de autoria, wake e recuperação no Modal
 questions/tests       simulador legado, mantido temporariamente
 ```
 
@@ -120,9 +125,12 @@ consultar a web quando `GROQ_WEB_SEARCH_ENABLED=true` (experimental). Só URLs
 presentes nos resultados reais da ferramenta são aceitas; sem licença confirmada,
 continuam links externos. Criar/refinar não usa essa ferramenta.
 
-Limites Free são compartilhados e sujeitos a mudança. Não fazemos upgrade de
-plano nem configuramos cobrança. A fila preserva etapas e aguarda capacidade;
+Limites Free são compartilhados e sujeitos a mudança. A aplicação não faz upgrade
+de plano nem configura cobrança. A fila preserva etapas e aguarda capacidade;
 sem serviços de produção validados, mantenha `SILOGIUM_AUTHORING_ENABLED=false`.
+O worker publicado já concluiu um smoke privado real, e a web habilita autoria
+para o beta aprovado. O teto operacional vigente deve ser conferido no
+[guia de deploy](docs/DEPLOYMENT.md).
 Veja [operação, limites e validação do Groq](docs/groq-integration.md).
 
 Teste real opt-in (consome a cota Groq, não executa o código gerado):
@@ -138,7 +146,7 @@ local não é uma sandbox de segurança; produção exige Modal.
 
 ## Supabase
 
-Crie um projeto e aplique a migration:
+Crie um projeto e aplique as migrações:
 
 ```powershell
 npx supabase link --project-ref SEU_PROJECT_REF
@@ -160,7 +168,7 @@ No Supabase Auth:
 3. inclua `https://SEU_DOMINIO/auth/callback` e `http://localhost:3000/auth/callback` nas URLs permitidas;
 4. altere `profiles.role` para `admin` apenas nos revisores autorizados.
 
-A migration cria `profiles`, `problems`, `problem_versions`, `problem_sources`, `publication_reviews`, `ai_jobs`, `submissions`, `api_tokens`, contadores privados, bundles privados, o bucket `problem-assets` e filas `authoring_jobs`/`grading_jobs`. As políticas RLS impedem acesso direto a rascunhos de terceiros; bundles e soluções de referência vivem no schema `private`.
+As migrações criam `profiles`, `problems`, `problem_versions`, `problem_sources`, `publication_reviews`, `ai_jobs`, `submissions`, `api_tokens`, contadores privados, bundles privados, o bucket `problem-assets` e filas `authoring_jobs`/`grading_jobs`. A autoria durável usa a tabela transacional `private.authoring_tasks`, não um consumidor dessas filas pgmq iniciais. As políticas RLS impedem acesso direto a rascunhos de terceiros; bundles e soluções de referência vivem no schema `private`. As 15 migrações atuais, até `202609100015_operational_capacity.sql`, foram aplicadas no ambiente hospedado em 10/09/2026.
 
 ### Catálogo e testes privados
 
