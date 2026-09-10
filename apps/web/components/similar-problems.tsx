@@ -21,11 +21,12 @@ export function CandidateOrigin({ candidate }: { candidate: Candidate }) {
   return <span className="result-origin">{candidate.kind === "catalog" ? candidate.sourceName : candidate.kind === "licensed_import" ? `Fonte licenciada · ${candidate.sourceName}` : `Link externo · ${candidate.sourceName}`}{candidate.licenseSpdx ? ` · ${candidate.licenseSpdx}` : ""}</span>;
 }
 
-export function SimilarProblems({ candidates, snapshot, edited, busy, error, onConfirm, onAdjust, onRetry }: {
+export function SimilarProblems({ candidates, snapshot, edited, busy, confirmAllowed = true, error, onConfirm, onAdjust, onRetry }: {
   candidates: Candidate[];
   snapshot: CreateRequest;
   edited: boolean;
   busy: boolean;
+  confirmAllowed?: boolean;
   error?: string;
   onConfirm: () => void;
   onAdjust: () => void;
@@ -57,7 +58,7 @@ export function SimilarProblems({ candidates, snapshot, edited, busy, error, onC
       <div><h3>Quer criar uma nova questão mesmo assim?</h3><p>A criação usará o pedido analisado acima. As questões sugeridas servem como referência de conceitos, não para copiar enunciados ou soluções.</p></div>
       {edited && <p className="similar-edited" role="status">O formulário está diferente do pedido analisado. Para usar suas alterações, envie o formulário novamente. Confirmar aqui mantém o pedido original acima.</p>}
       {error && <div className="similar-confirm-error" role="alert"><p>{error}</p><button className="button" type="button" onClick={onRetry} disabled={busy}>Consultar este pedido</button></div>}
-      <div className="similar-actions"><button className="button primary" type="button" onClick={onConfirm} disabled={busy}>{busy && <LoaderCircle className="spin" size={16} />}{busy ? "Confirmando criação…" : "Criar nova mesmo assim"}</button><button className="button" type="button" onClick={onAdjust} disabled={busy}>Ajustar pedido</button></div>
+      <div className="similar-actions"><button className="button primary" type="button" onClick={onConfirm} disabled={busy || !confirmAllowed}>{busy && <LoaderCircle className="spin" size={16} />}{busy ? "Confirmando criação…" : "Criar nova mesmo assim"}</button><button className="button" type="button" onClick={onAdjust} disabled={busy}>Ajustar pedido</button></div>
     </footer>
   </section>;
 }

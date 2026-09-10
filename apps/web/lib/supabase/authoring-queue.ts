@@ -2,13 +2,20 @@ import { createHash } from "node:crypto";
 import { buildProblemMetadata, problemFingerprint, type Actor } from "@silogium/core";
 import { persistableExternalCandidate, type AuthoringJob, type AuthoringQueue, type Conversation, type ConversationTurn, type JobLease, type JobOutcome } from "@silogium/authoring";
 import { createSupabaseAdminClient } from "./admin";
+import { wakeAuthoringWorker } from "../worker-wakeup";
 
 type QueueClient = { rpc(name: string, args: { p_action: string; p_payload: unknown }): PromiseLike<{ data: unknown; error: { message: string } | null }> };
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 
 /** Private materials cross only service-role RPC, never PostgREST table/GraphQL reads. */
 export class SupabaseAuthoringQueue implements AuthoringQueue {
-  constructor(private readonly client: () => QueueClient | null = createSupabaseAdminClient) {}
+  constructor(private readonly client: () => QueueClient | null = createSupabaseAdminClient,
+    private readonly wake: () => Promise<unknown> = wakeAuthoringWorker) {}
+
+  private async notify() {
+    // The database commit must succeed independently of this best-effort hint.
+    try { await this.wake(); } catch { /* The recovery sweep will inspect the queue. */ }
+  }
 
   private async call<T>(action: string, payload: unknown): Promise<T> {
     const client = this.client();
@@ -20,8 +27,13 @@ export class SupabaseAuthoringQueue implements AuthoringQueue {
 
   async enqueue(job: AuthoringJob, actor: Actor, turn?: ConversationTurn, newConversation?: Conversation) {
     await this.call("enqueue", { job, actorId: actor.id, turn, newConversation });
+    await this.notify();
   }
-  confirm(jobId: string, actorId: string) { return this.call<boolean>("confirm", { jobId, actorId }); }
+  async confirm(jobId: string, actorId: string) {
+    const confirmed = await this.call<boolean>("confirm", { jobId, actorId });
+    if (confirmed) await this.notify();
+    return confirmed;
+  }
   claim(workerId: string, leaseSeconds: number) { return this.call<JobLease | null>("claim", { workerId, leaseSeconds }); }
   heartbeat(lease: JobLease, leaseSeconds: number) { return this.call<boolean>("heartbeat", { jobId: lease.job.id, token: lease.token, leaseSeconds }); }
   checkpoint(lease: JobLease, key: string, value: unknown) { return this.call<boolean>("checkpoint", { jobId: lease.job.id, token: lease.token, key, value }); }

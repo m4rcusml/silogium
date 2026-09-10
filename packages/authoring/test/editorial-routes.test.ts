@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   actor: { id: "owner", handle: "owner", role: "user" as "user" | "admin" },
   open: vi.fn(), saveDraft: vi.fn(), validateDraft: vi.fn(), submitPublication: vi.fn(), moderate: vi.fn(),
-  listPending: vi.fn(), getPackageVersion: vi.fn()
+  listPending: vi.fn(), getPackageVersion: vi.fn(), requireBetaAccess: vi.fn()
 }));
 vi.mock("@/lib/actor", () => ({ getActor: async () => mocks.actor }));
 vi.mock("@/lib/authoring", () => ({ getAuthoringRepository: () => mocks }));
+vi.mock("@/lib/beta", () => ({ requireBetaAccess: mocks.requireBetaAccess }));
+vi.mock("@/lib/operational-capacity", () => ({ withExecutionActor: (_actor: unknown, action: () => Promise<unknown>) => action() }));
 vi.mock("../../../apps/web/app/api/v1/problems/[slug]/editorial/service.js", () => ({
   getEditorial: () => mocks,
   readEditorialBody: (request: Request) => request.json(),
@@ -26,6 +28,7 @@ const json = (body: unknown) => new Request("http://silogium.test/api", { method
 
 beforeEach(() => {
   vi.clearAllMocks(); mocks.actor.role = "user";
+  mocks.requireBetaAccess.mockResolvedValue({ state: "approved" });
   mocks.open.mockResolvedValue({ problem: { id: "p" }, visibleCases: [], revision: 0 });
   mocks.saveDraft.mockResolvedValue({ revision: 1 });
   mocks.validateDraft.mockResolvedValue({ revision: 2 });
@@ -34,6 +37,12 @@ beforeEach(() => {
 });
 
 describe("contratos HTTP editoriais", () => {
+  it("participante pendente não inicia validação remota, mas pode ler seu rascunho", async () => {
+    mocks.requireBetaAccess.mockRejectedValueOnce(new Error("Aguarde aprovação do beta."));
+    const response = await POST(json({ action: "validate", expectedRevision: 1 }), context);
+    expect(response.status).toBe(400); expect(mocks.validateDraft).not.toHaveBeenCalled();
+    expect((await GET(new Request("http://silogium.test/editorial"), context)).status).toBe(200);
+  });
   it("GET exige opt-in literal e o vincula ao ator autenticado", async () => {
     await GET(new Request("http://silogium.test/editorial?revealSpoilers=false"), context);
     expect(mocks.open).toHaveBeenLastCalledWith("editorial", mocks.actor, { revealSpoilers: false });

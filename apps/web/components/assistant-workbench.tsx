@@ -12,10 +12,13 @@ import { CandidateDetails, CandidateOrigin, SimilarProblems } from "./similar-pr
 import { ValidationDetails } from "./validation-details";
 import { StudioConversations } from "./studio-conversations";
 import { StudioExamples, StudioGuide, StudioModePicker } from "./studio-orientation";
+import { StudioAccessNotice } from "./studio-access-notice";
+import { useStudioAccess } from "./use-studio-access";
+import { brasiliaResetLabel, creationQuotaReached, type StudioAccess } from "../lib/studio-access";
 
 type RefinementDraft = { revision: number; phase: "draft" | "validating" | "validated"; problem: { title: string; slug: string } };
 
-export function AssistantWorkbench({ providerLabel, authoringAvailable = true, initialSection = "compose", initialMode = "search", initialSlug, isAdmin = false, actorId }: { providerLabel: string; authoringAvailable?: boolean; initialSection?: "compose" | "mine"; initialMode?: "search" | "create" | "refine"; initialSlug?: string; isAdmin?: boolean; actorId?: string }) {
+export function AssistantWorkbench({ providerLabel, authoringAvailable = true, initialAccess, initialSection = "compose", initialMode = "search", initialSlug, isAdmin = false, actorId }: { providerLabel: string; authoringAvailable?: boolean; initialAccess?: StudioAccess; initialSection?: "compose" | "mine"; initialMode?: "search" | "create" | "refine"; initialSlug?: string; isAdmin?: boolean; actorId?: string }) {
   const router = useRouter();
   const [section, setSection] = useState(initialSection);
   const [mode, setMode] = useState<"search" | "create" | "refine">(initialMode);
@@ -35,11 +38,19 @@ export function AssistantWorkbench({ providerLabel, authoringAvailable = true, i
   const [importError, setImportError] = useState<string>();
   const [imported, setImported] = useState<CreatedProblem>();
   const request = useStudioJob(actorId);
-  const loading = sending || request.monitoring || request.confirming || Boolean(importing);
+  const access = useStudioAccess(actorId, initialAccess, `${request.current?.id}:${request.job?.status}:${request.job?.progress?.reason}:${sending}`);
+  const feature = access.access?.features[mode];
+  const quotaReached = mode === "create" && creationQuotaReached(access.access?.beta);
+  const canSend = authoringAvailable && feature?.available === true && !access.error && !quotaReached;
+  const canImport = authoringAvailable && access.access?.features.import.available === true && !access.error;
+  const canConfirm = authoringAvailable && access.access?.features.create.available === true && !access.error && !creationQuotaReached(access.access?.beta);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const loading = sending || request.monitoring || request.confirming || request.controlling || Boolean(importing);
 
   useEffect(() => setSection(initialSection), [initialSection]);
   useEffect(() => setMode(initialMode), [initialMode]);
   useEffect(() => { setConversationId(undefined); setDraft(undefined); }, [actorId]);
+  useEffect(() => setConfirmCancel(false), [request.current?.id, request.job?.status]);
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
@@ -87,7 +98,7 @@ export function AssistantWorkbench({ providerLabel, authoringAvailable = true, i
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!authoringAvailable || loading || (mode === "refine" && (!draft || draft.phase === "validating"))) return;
+    if (!canSend || loading || (mode === "refine" && (!draft || draft.phase === "validating"))) return;
     setSending(true);
     setRequestError(undefined);
     setImported(undefined);
@@ -112,7 +123,7 @@ export function AssistantWorkbench({ providerLabel, authoringAvailable = true, i
   }
 
   async function importCandidate(candidate: Candidate) {
-    if (!authoringAvailable) return;
+    if (!canImport) return;
     setImporting(candidate.id);
     setImported(undefined);
     setImportError(undefined);
@@ -136,6 +147,7 @@ export function AssistantWorkbench({ providerLabel, authoringAvailable = true, i
   const analyzed = request.job?.request?.mode === "create" ? request.job.request : undefined;
   const edited = Boolean(analyzed && (mode !== "create" || prompt.trim() !== analyzed.prompt || runtime !== analyzed.runtime || format !== analyzed.format || difficulty !== analyzed.difficulty || visibility !== analyzed.visibility));
   const elapsed = `${Math.floor(request.elapsedSeconds / 60)}:${String(request.elapsedSeconds % 60).padStart(2, "0")}`;
+  const waitingLabel = request.job?.progress?.phase === "waiting" ? request.job.progress.reason === "access" ? "Aguardando liberação do beta…" : request.job.progress.reason === "operator" ? "Processamento pausado pela administração" : request.job.progress.reason === "quota" ? "Aguardando renovação da cota de criação…" : request.job.progress.reason === "capacity" ? "Aguardando capacidade para continuar…" : undefined : undefined;
 
   function adjustRequest() {
     if (!analyzed) return;
@@ -163,19 +175,25 @@ export function AssistantWorkbench({ providerLabel, authoringAvailable = true, i
 
     <section className="studio-main">
       {section === "mine" ? <header className="studio-header"><div><span className="eyebrow">Studio · Suas criações</span><h1>Minhas questões</h1><p>Gerencie as questões que você criou ou importou.</p></div><button className="button primary" type="button" disabled={loading} onClick={startCreation}>Nova questão</button></header> : <header className="studio-header"><div><span className="eyebrow">Studio</span><h1>Descobrir ou criar</h1><p>Encontre seu próximo desafio ou peça uma questão sob medida. Depois, resolva no editor ou pelo terminal.</p></div><span className="provider-label">{providerLabel}</span></header>}
+      <StudioAccessNotice access={access.access} error={access.error} refreshing={access.refreshing} onRefresh={access.refresh} />
 
       {(sending || request.monitoring || request.error) && <div className="authoring-progress">
-        <div className="authoring-progress-heading"><strong role="status">{sending ? "Analisando seu pedido…" : request.monitoring ? studioPhase(request.job?.progress?.phase) ?? (request.current?.mode === "search" ? "Pesquisando questões…" : request.current?.mode === "import" ? "Importando e validando…" : request.current?.mode === "refine" ? "Refinando o rascunho…" : "Processando seu pedido…") : "Acompanhamento pausado"}</strong>{request.monitoring && <span aria-label={`${request.elapsedSeconds} segundos desde o envio`}>{elapsed}</span>}</div>
+        <div className="authoring-progress-heading"><strong role="status">{sending ? "Analisando seu pedido…" : request.monitoring ? waitingLabel ?? studioPhase(request.job?.progress?.phase) ?? (request.current?.mode === "search" ? "Pesquisando questões…" : request.current?.mode === "import" ? "Importando e validando…" : request.current?.mode === "refine" ? "Refinando o rascunho…" : "Processando seu pedido…") : "Acompanhamento pausado"}</strong>{request.monitoring && <span aria-label={`${request.elapsedSeconds} segundos desde o envio`}>{elapsed}</span>}</div>
         <p>{request.error ?? (sending ? "Verificando o pedido antes de continuar." : "Estamos consultando o andamento. Você pode navegar por outras questões e voltar ao Studio para acompanhar.")}</p>
-        {request.monitoring && request.job?.progress?.phase === "waiting" && <p>Seu pedido permanece salvo. Não é necessário reenviar{request.job.progress.retryAt && Number.isFinite(Date.parse(request.job.progress.retryAt)) ? `; próxima tentativa a partir de ${new Date(request.job.progress.retryAt).toLocaleTimeString("pt-BR")}` : ""}.</p>}
+        {request.monitoring && request.job?.progress?.phase === "waiting" && <><p>Seu pedido permanece salvo. Não é necessário reenviar{request.job.progress.retryAt && Number.isFinite(Date.parse(request.job.progress.retryAt)) ? `; próxima tentativa a partir de ${brasiliaResetLabel(request.job.progress.retryAt)}, sujeita à capacidade disponível` : ""}.</p>{request.job.progress.reason === "access" && <p>O processamento aguarda a liberação do seu acesso ao beta.</p>}{request.job.progress.reason === "operator" && <p>A administração pausou este serviço. O pedido mantém as etapas já concluídas.</p>}{request.job.progress.reason === "quota" && <p>Sua cota de novas questões precisa renovar. O saldo diário acima usa o horário de Brasília.</p>}{request.job.progress.reason === "capacity" && <p>A capacidade compartilhada está temporariamente esgotada. Sua cota pessoal e a disponibilidade do serviço são limites diferentes.</p>}</>}
         {request.error && <><div className="studio-inline-actions"><button className="button" type="button" onClick={request.retry}>Consultar novamente</button><button className="button" type="button" onClick={() => changeSection("mine")}>Conferir minhas questões</button><button className="button" type="button" onClick={request.clear}>Dispensar acompanhamento</button></div><p>Dispensar apenas fecha este aviso; não cancela nem reenvia o pedido.</p></>}
+        {request.current && request.job?.status === "running" && <div className="studio-job-controls">
+          {request.controlError && <p className="danger-text" role="alert">{request.controlError}</p>}
+          {confirmCancel ? <><strong>Cancelar este pedido?</strong><p>O processamento será interrompido. Questões já concluídas são preservadas; cancelar não recria nem reenvia o pedido.</p><div className="studio-inline-actions"><button className="button" type="button" disabled={request.controlling} onClick={() => void request.cancel()}>Confirmar cancelamento</button><button className="button" type="button" disabled={request.controlling} onClick={() => setConfirmCancel(false)}>Manter pedido</button></div></> : <div className="studio-inline-actions">{request.job.progress?.phase === "waiting" && <button className="button" type="button" disabled={request.controlling || access.access?.beta?.state !== "approved"} onClick={() => void request.resume()}>Verificar retomada</button>}<button className="button" type="button" disabled={request.controlling} onClick={() => setConfirmCancel(true)}>Cancelar pedido</button></div>}
+        </div>}
       </div>}
 
       {section === "mine" ? <div className="studio-library"><MyProblems refreshKey={result?.kind === "create" ? result.package.problem.id : imported?.problem.id} /></div> : <>
-        {!authoringAvailable && <div className="notice" role="status"><p>A pesquisa e a criação com IA ainda não estão habilitadas neste ambiente. Suas questões e conversas continuam disponíveis.</p><Link className="button" href="/explorar">Praticar questões do catálogo</Link></div>}
         <StudioGuide />
         <StudioModePicker mode={mode} canRefine={Boolean(initialSlug)} disabled={loading || Boolean(importing)} onChange={changeMode} />
-        {authoringAvailable && <form className="authoring-form" onSubmit={submit}>
+        {!feature?.available && access.access?.beta?.state === "approved" && <div className="notice studio-feature-notice" role="status"><p>{feature?.reason ?? "Conferindo a disponibilidade deste recurso."}</p><p>Você pode trocar de modo, consultar conversas e abrir suas questões. <Link href="/explorar">Continuar no catálogo</Link>.</p>{feature?.retryAt && <p>Nova verificação prevista a partir de {brasiliaResetLabel(feature.retryAt)}.</p>}</div>}
+        {quotaReached && <div className="notice studio-feature-notice" role="status"><strong>Sua cota de criação de hoje está reservada ou concluída.</strong><p>Você ainda pode pesquisar e resolver questões disponíveis. A cota renova em {brasiliaResetLabel(access.access!.beta!.resetsAt)}.</p></div>}
+        <form className="authoring-form" onSubmit={submit}>
           <div className="studio-form-intro"><h2>{mode === "search" ? "Encontre o que quer praticar" : mode === "create" ? "Descreva sua nova questão" : "Ajuste o enunciado e os testes"}</h2><p>{mode === "search" ? "Diga o assunto ou a habilidade. Você receberá sugestões com fonte e um caminho para resolver." : mode === "create" ? "A IA prepara o enunciado, o código inicial e os testes. Após a validação, você pode começar a resolver — não precisa publicar." : "Refinar muda a questão, não escreve sua solução. As alterações precisam ser revisadas e validadas antes de ficar disponíveis para resolução."}</p></div>
           {conversationId && <div className="studio-context"><p>{mode === "search" ? "A pesquisa externa usa somente o pedido atual e a linguagem, sem enviar os materiais privados da conversa." : "Continuando uma conversa. A IA considera até quatro pedidos anteriores."}</p><button type="button" className="button" disabled={loading} onClick={() => { setConversationId(undefined); request.clear(); setRequestError(undefined); setImportError(undefined); setImported(undefined); setLicensesAccepted(false); }}>Começar outro assunto</button></div>}
           {mode === "refine" && (draftError ? <div className="notice" role="alert"><p>Não foi possível abrir o rascunho: {draftError}</p><button type="button" className="button" onClick={() => setDraftReload((value) => value + 1)}>Tentar abrir rascunho novamente</button></div> : <p className="notice" role="status">{draft?.phase === "validating" ? <>A validação deste rascunho está em andamento. Aguarde a conclusão antes de pedir um refinamento. <Link href={`/studio?section=mine&edit=${encodeURIComponent(draft.problem.slug)}`}>Consultar rascunho no editor</Link></> : <>{draft ? `Refinando “${draft.problem.title}”, revisão ${draft.revision}.` : "Carregando rascunho…"} A IA recebe os materiais de autoria para manter testes e referência coerentes. A versão publicada permanece inalterada.</>}</p>)}
@@ -189,17 +207,17 @@ export function AssistantWorkbench({ providerLabel, authoringAvailable = true, i
             </>}
           </div>
           {mode === "create" && visibility === "public" && <label className="license-consent"><input type="checkbox" checked={licensesAccepted} onChange={(event) => setLicensesAccepted(event.target.checked)} /><span>Aceito publicar o enunciado sob CC BY 4.0 e o starter e testes visíveis sob MIT, com crédito permanente.</span></label>}
-          <div className="authoring-submit-row"><p>{mode === "refine" ? "Consome uma operação de IA. Não pesquisa a web. O resultado fica como rascunho para você revisar, salvar e validar no editor antes de publicar." : mode === "search" ? "Busca no catálogo, em fontes licenciadas e na web. Links externos abrem no site de origem." : "Primeiro verificamos questões parecidas. Se houver sugestões, você decide se quer criar outra. A criação não pesquisa a web e passa por testes automáticos."}</p><button className="button primary" disabled={loading || Boolean(importing) || prompt.trim().length < 5 || (mode === "refine" && (!draft || draft.phase === "validating")) || (mode === "create" && visibility === "public" && !licensesAccepted)}>{loading ? <LoaderCircle className="spin" size={16} /> : mode === "search" ? <Search size={16} /> : <FilePenLine size={16} />}{loading ? "Pedido em andamento" : mode === "refine" ? "Refinar com IA" : mode === "search" ? "Encontrar questões" : "Criar e validar"}</button></div>
-        </form>}
+          <div className="authoring-submit-row"><p>{mode === "refine" ? "Não usa sua cota diária de novas questões, mas depende da capacidade da IA. Revise, salve e valide o rascunho no editor antes de publicar." : mode === "search" ? "Prioriza o catálogo e fontes licenciadas. A pesquisa web é experimental e depende da disponibilidade; links externos abrem na fonte." : "Primeiro verificamos questões parecidas. Se houver sugestões, você decide se quer criar outra. A criação não pesquisa a web e passa por testes automáticos."}</p><button className="button primary" disabled={!canSend || loading || Boolean(importing) || prompt.trim().length < 5 || (mode === "refine" && (!draft || draft.phase === "validating")) || (mode === "create" && visibility === "public" && !licensesAccepted)}>{loading ? <LoaderCircle className="spin" size={16} /> : mode === "search" ? <Search size={16} /> : <FilePenLine size={16} />}{loading ? "Pedido em andamento" : mode === "refine" ? "Refinar com IA" : mode === "search" ? "Encontrar questões" : "Criar e validar"}</button></div>
+        </form>
 
         <div className="authoring-results">
           {requestError && <div className="notice danger-text" role="alert">{requestError}</div>}
-          {request.job?.error && <div className="notice danger-text" role="alert">{request.job.error}</div>}
+          {request.job?.error && <div className={`notice${request.job.progress?.reason === "cancelled" ? "" : " danger-text"}`} role={request.job.progress?.reason === "cancelled" ? "status" : "alert"}>{request.job.progress?.reason === "cancelled" && <strong>Pedido cancelado. </strong>}{request.job.error}</div>}
           {request.job?.status === "needs_clarification" && !request.job.error && <div className="notice" role="status">O pedido precisa de mais detalhes. Especifique as operações, regras ou conceitos que deseja praticar.</div>}
           {importError && <div className="notice danger-text" role="alert">{importError}</div>}
           {importing && <div className="notice" role="status">Registrando a importação. Depois de receber o identificador, você pode sair desta página e acompanhar pelo histórico.</div>}
           {imported && <CreatedResult value={imported} actorId={actorId} isAdmin={isAdmin} />}
-          {request.job?.status === "needs_confirmation" && result?.kind === "recommendations" && analyzed && <SimilarProblems candidates={result.candidates} snapshot={analyzed} edited={edited} busy={loading || !authoringAvailable} error={request.confirmationError} onConfirm={() => { if (authoringAvailable) void request.confirm(); }} onAdjust={adjustRequest} onRetry={request.retry} />}
+          {request.job?.status === "needs_confirmation" && result?.kind === "recommendations" && analyzed && <SimilarProblems candidates={result.candidates} snapshot={analyzed} edited={edited} busy={loading} confirmAllowed={canConfirm} error={request.confirmationError} onConfirm={() => { if (canConfirm) void request.confirm(); }} onAdjust={adjustRequest} onRetry={() => { request.retry(); access.refresh(); }} />}
           {result?.kind === "search" && <section className="search-results" aria-label="Questões encontradas">
             <h2>Escolha seu próximo desafio</h2><p>Resolver abre o editor do Silogium. Ver na fonte abre o site original. Importar e validar prepara uma cópia licenciada para resolver aqui.</p>
             <p role="status">{result.candidates.length ? `${result.candidates.length} ${result.candidates.length === 1 ? "questão encontrada" : "questões encontradas"}` : "Nenhuma questão encontrada. Tente outro tema ou uma descrição mais ampla."}</p>
@@ -207,7 +225,7 @@ export function AssistantWorkbench({ providerLabel, authoringAvailable = true, i
               <div><CandidateOrigin candidate={candidate} /><h2>{candidate.title}</h2><p>{candidate.summary}</p><CandidateDetails candidate={candidate} /></div>
               <div className="result-actions">
                 {candidate.kind === "catalog" ? <Link className="button" href={candidate.url}>Resolver</Link> : <a href={candidate.url} target="_blank" rel="noreferrer">Ver na fonte <ArrowUpRight size={14} /></a>}
-                {candidate.kind === "licensed_import" && candidate.importable && <button className="button" type="button" disabled={!authoringAvailable || Boolean(importing) || loading} onClick={() => importCandidate(candidate)}>{importing === candidate.id ? "Importando…" : "Importar e validar"}</button>}
+                {candidate.kind === "licensed_import" && candidate.importable && <button className="button" type="button" disabled={!canImport || Boolean(importing) || loading} onClick={() => importCandidate(candidate)}>{importing === candidate.id ? "Importando…" : "Importar e validar"}</button>}
               </div>
             </article>)}
           </section>}

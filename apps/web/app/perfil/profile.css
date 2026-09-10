@@ -14,6 +14,9 @@
 .profile-panel h2 { font-size: 18px; line-height: 1.4; }
 .profile-panel h3 { font-size: 13px; font-weight: 650; line-height: 1.5; }
 .profile-panel p { overflow-wrap: anywhere; }
+.profile-beta { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 18px; padding: 18px 22px; }
+.profile-beta > div { display: grid; gap: 7px; flex: 1 1 300px; min-width: 0; }
+.profile-beta > a { flex-shrink: 0; }
 .profile-section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .profile-section-heading > div { min-width: 0; display: grid; gap: 6px; }
 .profile-section-heading p { color: var(--muted); font-size: 12px; line-height: 1.65; }

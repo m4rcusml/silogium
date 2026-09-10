@@ -1,8 +1,8 @@
 import { ProblemEditorial, StructuralProblemValidator } from "@silogium/authoring";
-import { createJudgeFromEnv } from "@silogium/judge";
+import { getPlatformJudge } from "@/lib/platform-judge";
 import { getAuthoringRepository } from "@/lib/authoring";
 
-export function getEditorial() { return new ProblemEditorial(getAuthoringRepository(), new StructuralProblemValidator(createJudgeFromEnv())); }
+export function getEditorial() { return new ProblemEditorial(getAuthoringRepository(), new StructuralProblemValidator(getPlatformJudge())); }
 
 export async function readEditorialBody(request: Request): Promise<Record<string, unknown>> {
   if (!request.body) throw new Error("Informe os dados do rascunho.");

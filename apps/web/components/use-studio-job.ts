@@ -8,7 +8,7 @@ import { readStudioResponse, studioError } from "./studio-request";
 export type Candidate = { id: string; kind: "catalog" | "licensed_import" | "external_link"; title: string; summary: string; url: string; sourceName: string; licenseSpdx?: string; importable: boolean; runtime: "typescript" | "python"; metadata?: DiscoveryMetadata; matchReasons?: string[]; similarity?: number; retrievedAt?: string; format?: "classic" | "progressive"; difficulty?: "easy" | "medium" | "hard" };
 export type CreatedProblem = { problem: ProblemDefinition; accessKey?: string; validation: ValidationReport };
 export type JobResult = {
-  progress?: { phase: import("@silogium/authoring").AiPhase; updatedAt: string; retryAt?: string };
+  progress?: { phase: import("@silogium/authoring").AiPhase; updatedAt: string; retryAt?: string; reason?: "capacity" | "access" | "operator" | "cancelled" | "quota" };
   status: "running" | "completed" | "failed" | "needs_clarification" | "needs_confirmation";
   error?: string;
   request?: AuthoringRequest;
@@ -25,6 +25,9 @@ export function useStudioJob(actorId?: string) {
   const [error, setError] = useState<string>();
   const [confirmationError, setConfirmationError] = useState<string>();
   const [confirming, setConfirming] = useState(false);
+  const [controlling, setControlling] = useState(false);
+  const [controlError, setControlError] = useState<string>();
+  const controlController = useRef<AbortController | null>(null);
   const confirmationController = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const [retry, setRetry] = useState(0);
@@ -32,6 +35,10 @@ export function useStudioJob(actorId?: string) {
 
   useEffect(() => {
     generation.current += 1;
+    controlController.current?.abort();
+    controlController.current = null;
+    setControlling(false);
+    setControlError(undefined);
     confirmationController.current?.abort();
     confirmationController.current = null;
     setCurrent(null);
@@ -49,6 +56,8 @@ export function useStudioJob(actorId?: string) {
 
   useEffect(() => () => {
     generation.current += 1;
+    controlController.current?.abort();
+    controlController.current = null;
     confirmationController.current?.abort();
     confirmationController.current = null;
   }, [storageKey]);
@@ -60,11 +69,15 @@ export function useStudioJob(actorId?: string) {
     const active = () => !disposed && generation.current === epoch;
     let timer: ReturnType<typeof setTimeout>;
     const controller = new AbortController();
-    const deadline = Date.now() + WATCH_TIMEOUT_MS;
+    let deadline = Date.now() + WATCH_TIMEOUT_MS;
+    let inFlight = false;
+    let stopped = false;
     setMonitoring(true);
     setError(undefined);
 
     async function poll() {
+      if (!active() || document.hidden || inFlight || stopped) return;
+      inFlight = true;
       const requestTimeout = setTimeout(() => controller.abort(), 20_000);
       try {
         const response = await fetch(`/api/v1/jobs/${encodeURIComponent(current!.id)}`, { cache: "no-store", signal: controller.signal });
@@ -76,25 +89,35 @@ export function useStudioJob(actorId?: string) {
         setJob(next);
         if (next.status !== "needs_confirmation") setConfirmationError(undefined);
         if (next.status !== "running") {
+          stopped = true;
           setMonitoring(false);
           return;
         }
-        if (Date.now() >= deadline) {
+        if (next.progress?.phase === "waiting") deadline = Date.now() + WATCH_TIMEOUT_MS;
+        else if (Date.now() >= deadline) {
+          stopped = true;
           setMonitoring(false);
           setError("O pedido está demorando mais que o esperado. Você pode consultar novamente ou abrir suas questões. O processamento no servidor não foi cancelado.");
           return;
         }
-        timer = setTimeout(() => void poll(), 1_500);
+        timer = setTimeout(() => void poll(), next.progress?.phase === "waiting" ? 30_000 : 1_500);
       } catch (caught) {
         if (!active()) return;
+        stopped = true;
         setMonitoring(false);
         setError(controller.signal.aborted ? "A consulta demorou a responder. Seu pedido continua salvo; consulte novamente para acompanhar." : studioError(caught));
       } finally {
+        inFlight = false;
         clearTimeout(requestTimeout);
       }
     }
+    const onVisibility = () => {
+      clearTimeout(timer);
+      if (!document.hidden) { deadline = Date.now() + WATCH_TIMEOUT_MS; void poll(); }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     void poll();
-    return () => { disposed = true; controller.abort(); clearTimeout(timer); };
+    return () => { disposed = true; controller.abort(); clearTimeout(timer); document.removeEventListener("visibilitychange", onVisibility); };
   }, [current, retry]);
 
   useEffect(() => {
@@ -107,6 +130,10 @@ export function useStudioJob(actorId?: string) {
 
   function start(id: string, mode: StoredJob["mode"]) {
     generation.current += 1;
+    controlController.current?.abort();
+    controlController.current = null;
+    setControlling(false);
+    setControlError(undefined);
     confirmationController.current?.abort();
     confirmationController.current = null;
     const next = { id, mode, startedAt: Date.now() };
@@ -120,6 +147,10 @@ export function useStudioJob(actorId?: string) {
 
   function clear() {
     generation.current += 1;
+    controlController.current?.abort();
+    controlController.current = null;
+    setControlling(false);
+    setControlError(undefined);
     confirmationController.current?.abort();
     confirmationController.current = null;
     setCurrent(null);
@@ -162,5 +193,27 @@ export function useStudioJob(actorId?: string) {
     }
   }
 
-  return { current, job, monitoring, error, confirmationError, confirming, elapsedSeconds, start, clear, confirm, retry: () => setRetry((value) => value + 1) };
+  async function control(action: "cancel" | "resume") {
+    if (!current || controlController.current) return;
+    const controller = new AbortController();
+    controlController.current = controller;
+    const epoch = generation.current;
+    const active = () => generation.current === epoch && controlController.current === controller;
+    setControlling(true); setControlError(undefined);
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const response = await fetch(`/api/v1/jobs/${encodeURIComponent(current.id)}/${action}`, { method: "POST", signal: controller.signal });
+      const result = await readStudioResponse<{ jobId: string }>(response, "Não foi possível alterar este pedido");
+      if (!active()) return;
+      if (result.jobId !== current.id) throw new Error("O servidor não confirmou o pedido original. Consulte novamente.");
+      setRetry(value => value + 1);
+    } catch (caught) {
+      if (active()) setControlError(controller.signal.aborted ? "A resposta demorou. Consulte o pedido antes de repetir a ação." : studioError(caught));
+    } finally {
+      clearTimeout(timeout);
+      if (active()) { controlController.current = null; setControlling(false); }
+    }
+  }
+
+  return { current, job, monitoring, error, confirmationError, confirming, controlling, controlError, elapsedSeconds, start, clear, confirm, cancel: () => control("cancel"), resume: () => control("resume"), retry: () => setRetry((value) => value + 1) };
 }

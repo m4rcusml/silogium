@@ -2,7 +2,7 @@
 
 Workflow: `.github/workflows/checks.yml`.
 
-**Estado:** o arquivo foi preparado, mas o workflow não foi executado no GitHub nesta tarefa. O ambiente local não dispõe de Docker; não foram iniciados Supabase/PostgreSQL, aplicadas migrations nem executados testes pgTAP aqui. Uma primeira execução verde no runner ainda é necessária antes de afirmar compatibilidade real do banco.
+**Estado:** a versão anteriormente publicada teve CI aprovado, documentado em [DEPLOYMENT](./DEPLOYMENT.md). As alterações novas do [beta](./beta-closed.md) ainda exigem sua própria execução no GitHub; aprovação de um commit anterior não vale para elas. Este ambiente local não dispõe de Docker. Os testes SQL do beta foram executados no PostgreSQL hospedado em transações com rollback, sem aplicar permanentemente as migrações nem alterar os dados existentes.
 
 ## Jobs independentes
 
@@ -25,7 +25,7 @@ O job de banco lê `supabase/config.toml` sem alterá-lo. O comando `db start` i
 ## O que os testes não comprovam
 
 - IA fica em simulador ou doubles de teste: nenhuma geração OpenAI/Codex real, credencial ou sessão pessoal é usada.
-- O comando Python é `python -m unittest discover -s infra/modal -p "test_*.py" -v`, apenas stdlib. Ele verifica o controlador com APIs simuladas, não provisiona Modal.
+- As suítes Python são `npm run test:judge:controller` e `npm run test:worker:controller`. Verificam controller e worker com APIs simuladas, sem provisionar Modal.
 - Um smoke adicional instala os SDKs fixados e importa as definições Modal com rede bloqueada; não constrói imagens nem acessa contas. Depois do build, um servidor Next de produção temporário, em porta loopback livre, comprova que requisições anônimas/Bearer/criação são recusadas sem configuração Supabase. Esse smoke não autentica ninguém nem escreve no banco.
 - O navegador usa desenvolvimento local isolado; não comprova OAuth real, configuração da Vercel ou funcionamento de provedores cloud.
 - Nenhuma execução com referências/testes privados externos do desenvolvedor é exigida no CI público. Os testes existentes criam seus próprios dados sintéticos ou consomem os fixtures públicos do repo.
@@ -37,6 +37,6 @@ O job de banco lê `supabase/config.toml` sem alterá-lo. O comando `db start` i
 1. Catálogo, versões e atribuições anônimos têm policies separadas, sem chamar `private.is_admin()`, cujo acesso anônimo permanece proibido.
 2. As tabelas da aplicação recebem grants explícitos por papel. RLS continua filtrando linhas; clientes têm leitura limitada e somente o update de `handle`/`avatar_url` já previsto para perfis. Escritas editoriais, tokens, submissões e os demais fluxos protegidos continuam no servidor. Jobs brutos não ficam legíveis por clientes.
 
-O teste `supabase/tests/database/explicit-access.test.sql` inclui leituras reais sob `anon` e `authenticated` e INSERT/UPDATE/SELECT/DELETE sob `service_role`, além de verificar negativas de privilégio. O arquivo está preparado, não validado por uma instância real nesta tarefa.
+O teste `supabase/tests/database/explicit-access.test.sql` inclui leituras reais sob `anon` e `authenticated` e INSERT/UPDATE/SELECT/DELETE sob `service_role`, além de verificar negativas de privilégio. A evidência da versão publicada está no guia de deploy; qualquer alteração nova precisa de nova execução.
 
 Essa explicitação é importante porque versões atuais da CLI desativam os grants automáticos para novos objetos em `public`. Não habilitamos exposição automática para mascarar falhas. As versões, SHAs e o comportamento foram investigados nas [notas com fontes primárias](./ci-primary-sources.md).

@@ -1,4 +1,4 @@
-import { JudgeBundleSchema, ProblemDefinitionSchema, type ExecutionRequest, type ExecutionResult, type JudgeBundle, type ProblemDefinition } from "@silogium/core";
+import { CapacityUnavailableError, JudgeBundleSchema, ProblemDefinitionSchema, type ExecutionRequest, type ExecutionResult, type JudgeBundle, type ProblemDefinition } from "@silogium/core";
 import type { ProblemValidator, ValidationReport } from "./types.js";
 import { buildQualityMutations, fixturesAreConsistent, inspectCoverage, isJsonFixture } from "./quality.js";
 
@@ -67,7 +67,10 @@ export class StructuralProblemValidator implements ProblemValidator {
           const result = await this.executor!.evaluate(problem, bundle, { ...base, source });
           if (result.verdict === "system_error") infrastructureError = true;
           return result;
-        } catch { infrastructureError = true; return null; }
+        } catch (error) {
+          if (error instanceof CapacityUnavailableError) throw error;
+          infrastructureError = true; return null;
+        }
       };
       const referenceResult = await evaluate(bundle.referenceSolutions[runtime.language]!);
       const referencePassed = referenceResult?.verdict === "accepted" && referenceResult.cases.length === cases.length

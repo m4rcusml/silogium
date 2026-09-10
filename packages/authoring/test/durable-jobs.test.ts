@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Actor, ContentRequest } from "@silogium/core";
+import { CapacityUnavailableError, type Actor, type ContentRequest } from "@silogium/core";
 import { AuthoringWorker, ExercismAdapter, LocalAiAdapter, MemoryAuthoringQueue, MemoryAuthoringRepository, MemoryConversationRepository,
   PermanentAuthoringError, ProblemAuthoringModule, ProblemEditorial, type AiAuthoringAdapter, type AuthoringJob, type GeneratedPackage, type JobLease, type JobOutcome, type ValidationReport } from "../src/index.js";
 import { mockSnapshot } from "./fixtures/exercism-source.js";
@@ -41,6 +41,20 @@ const outcome = (lease: JobLease): JobOutcome => ({ job: { ...lease.job, status:
 afterEach(() => vi.restoreAllMocks());
 
 describe("autoria durável pelo mesmo módulo", () => {
+  it("preserva a geração quando a validação aguarda capacidade por mais de um dia", async () => {
+    const s = setup();
+    const requested = await s.module.request(input, actor);
+    s.validator.validate.mockRejectedValueOnce(new CapacityUnavailableError("modal", { available: false, reason: "Créditos indisponíveis" }))
+      .mockRejectedValueOnce(new CapacityUnavailableError("modal", { available: false, reason: "Créditos indisponíveis" }));
+    expect(await s.worker().runOnce()).toBe("retry");
+    s.advance(86_400_001);
+    expect(await s.worker().runOnce()).toBe("retry");
+    expect((await s.module.getJob(requested.jobId, actor))?.status).toBe("running");
+    s.advance(300001);
+    expect(await s.worker().runOnce()).toBe("completed");
+    expect(s.ai.create).toHaveBeenCalledOnce(); expect(s.ai.repair).not.toHaveBeenCalled();
+    expect(s.reserve).toHaveBeenCalledOnce(); expect(await s.repository.listForActor(actor)).toHaveLength(1);
+  });
   it("retoma a fase privada após 429 sem gastar tentativas nem cobrar outra operação", async () => {
     const s = setup(); const definition = vi.fn(async () => ({ rules: "private" })); let calls = 0;
     s.ai.create.mockImplementation(async () => {
@@ -152,11 +166,11 @@ describe("autoria durável pelo mesmo módulo", () => {
     expect(s.ai.create).toHaveBeenCalledOnce(); expect(s.ai.repair).not.toHaveBeenCalled(); expect(s.validator.validate).toHaveBeenCalledTimes(2);
   });
 
-  it("cota negada é terminal, não chama provedor e não fica rodando para sempre", async () => {
+  it("cota negada pausa até a renovação sem chamar o provedor nem perder o pedido", async () => {
     const s = setup(); s.reserve.mockResolvedValue(false);
     const requested = await s.module.request(input, actor);
-    expect(await s.worker().runOnce()).toBe("retry");
-    expect((await s.module.getJob(requested.jobId, actor))?.status).toBe("failed");
+    expect(await s.worker().runOnce()).toBe("lease_lost");
+    expect((await s.module.getJob(requested.jobId, actor))?.status).toBe("running");
     s.advance(1_000_000); expect(await s.worker().runOnce()).toBe("idle"); expect(s.ai.create).not.toHaveBeenCalled();
   });
 

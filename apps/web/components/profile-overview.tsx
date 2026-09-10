@@ -9,6 +9,7 @@ import { TokenManager } from "./token-manager";
 import { usePracticeOverview } from "./use-practice-overview";
 import { PracticeProfilePanel } from "./practice-progress";
 import { PersonalProfileSettings } from "./personal-profile-settings";
+import { ProfileBetaNotice } from "./profile-beta-notice";
 
 export function ProfileOverview({ actor }: { actor: Actor }) {
   const activity = useExecutionActivity();
@@ -25,6 +26,7 @@ export function ProfileOverview({ actor }: { actor: Actor }) {
       </div>
       <Link className="button primary" href="/explorar"><BookOpen size={16} aria-hidden="true" /> Praticar</Link>
     </header>
+    <ProfileBetaNotice actorId={actor.id} />
 
     <div className="profile-layout">
       <div className="profile-main-column">

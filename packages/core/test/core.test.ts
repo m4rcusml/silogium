@@ -42,14 +42,12 @@ describe("cotas", () => {
     expect(checkQuota("remote_execution", events, now)).toMatchObject({ allowed: false, retryAfterSeconds: 60 });
   });
 
-  it("aplica as cotas diárias de IA e execução remota", () => {
+  it("aplica a cota diária de execução remota", () => {
     const now = new Date("2026-09-08T12:00:00.000Z");
-    const aiEvents = Array.from({ length: 5 }, () => ({ kind: "ai" as const, occurredAt: now }));
     const executionEvents = Array.from({ length: 50 }, (_, index) => ({
       kind: "remote_execution" as const,
       occurredAt: new Date(now.getTime() - index * 61_000)
     }));
-    expect(checkQuota("ai", aiEvents, now).allowed).toBe(false);
     expect(checkQuota("remote_execution", executionEvents, now).allowed).toBe(false);
   });
 });

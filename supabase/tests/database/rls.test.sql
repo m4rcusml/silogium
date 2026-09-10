@@ -21,20 +21,20 @@ select ok((select relrowsecurity from pg_class where oid = 'public.problem_versi
 
 set local role anon;
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
-select is((select count(*) from public.problems), 1::bigint, 'anônimo enxerga somente a questão publicada');
+select is((select count(*) from public.problems where id in ('20000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000003')), 1::bigint, 'anônimo enxerga somente a questão publicada entre as fixtures');
 reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"10000000-0000-4000-8000-000000000001"}', true);
-select is((select count(*) from public.problems), 3::bigint, 'autor enxerga seus rascunhos e a questão pública');
+select is((select count(*) from public.problems where id in ('20000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000003')), 3::bigint, 'autor enxerga seus rascunhos e a questão pública');
 select lives_ok($$update public.profiles set handle = 'autor-editado' where id = '10000000-0000-4000-8000-000000000001'$$, 'usuário altera o próprio handle');
 select throws_ok($$update public.profiles set role = 'admin' where id = '10000000-0000-4000-8000-000000000001'$$, '42501', null, 'usuário não eleva o próprio papel');
 reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"10000000-0000-4000-8000-000000000002"}', true);
-select is((select count(*) from public.problems), 1::bigint, 'outro usuário não enxerga rascunhos privados');
-select is((select count(*) from public.problems where visibility = 'unlisted'), 0::bigint, 'questão não listada não vaza pela Data API');
+select is((select count(*) from public.problems where id in ('20000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000003')), 1::bigint, 'outro usuário não enxerga rascunhos privados');
+select is((select count(*) from public.problems where id='20000000-0000-4000-8000-000000000003'), 0::bigint, 'questão não listada não vaza pela Data API');
 select throws_ok($$select * from private.judge_bundles$$, '42501', null, 'bundles do judge não são acessíveis ao usuário');
 reset role;
 

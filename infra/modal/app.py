@@ -129,7 +129,9 @@ class ModalCaseExecutor:
                         pass
 
 
-@app.function(image=controller_image, secrets=[modal.Secret.from_name("silogium-judge-token")], timeout=40)
+@app.function(image=controller_image, secrets=[modal.Secret.from_name("silogium-judge-token")], timeout=40, startup_timeout=10,
+              cpu=(0.125, 1.0), memory=(256, 256), min_containers=0,
+              max_containers=2, buffer_containers=0, scaledown_window=2)
 @modal.fastapi_endpoint(method="POST", docs=False)
 async def evaluate(request: fastapi.Request):
     expected = os.environ.get("AUTH_TOKEN", "")

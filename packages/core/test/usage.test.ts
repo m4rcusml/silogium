@@ -3,14 +3,13 @@ vi.mock("../../../apps/web/lib/supabase/admin.js", () => ({ createSupabaseAdminC
 import { consumeQuota, refundQuota } from "../../../apps/web/lib/usage.js";
 
 describe("cota local de operações", () => {
-  it("permite todas as cinco operações e só bloqueia a sexta", async () => {
+  it("devolve uma execução quando a infraestrutura falha", async () => {
     const user = crypto.randomUUID();
     for (let index = 0; index < 5; index += 1) {
-      expect(await consumeQuota(user, "ai")).toMatchObject({ allowed: true, dailyRemaining: 4 - index });
+      expect(await consumeQuota(user, "remote_execution")).toMatchObject({ allowed: true, dailyRemaining: 49 - index });
     }
-    expect(await consumeQuota(user, "ai")).toMatchObject({ allowed: false, dailyRemaining: 0 });
-    await refundQuota(user, "ai");
-    expect(await consumeQuota(user, "ai")).toMatchObject({ allowed: true, dailyRemaining: 0 });
+    await refundQuota(user, "remote_execution");
+    expect(await consumeQuota(user, "remote_execution")).toMatchObject({ allowed: true, dailyRemaining: 45 });
   });
 
   it("permite a décima execução por minuto antes de bloquear", async () => {

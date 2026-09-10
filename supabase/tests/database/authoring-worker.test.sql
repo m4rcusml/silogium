@@ -1,6 +1,6 @@
+begin;
 -- Prepared pgTAP contracts. This file must run against migrated PostgreSQL;
 -- mocked TypeScript tests do not substitute for these transaction/RLS checks.
-begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 select no_plan();
@@ -8,6 +8,8 @@ select no_plan();
 insert into auth.users(id,email,raw_user_meta_data) values
  ('a1000000-0000-4000-8000-000000000001','worker-owner@silogium.test','{"user_name":"worker-owner"}'),
  ('a1000000-0000-4000-8000-000000000002','worker-other@silogium.test','{"user_name":"worker-other"}');
+-- These queue fixtures represent already-approved beta participants.
+update private.beta_participants set state='approved' where user_id in ('a1000000-0000-4000-8000-000000000001','a1000000-0000-4000-8000-000000000002');
 create temporary table worker_payload(name text primary key, value jsonb);
 grant all on worker_payload to service_role;
 insert into worker_payload values ('enqueue','{
@@ -43,7 +45,7 @@ select is((select checkpoints#>>'{generated,reference}' from private.authoring_t
 select is(public.authoring_queue('reserve_ai',(select value from worker_payload where name='fence')),'true'::jsonb,'primeira reserva de cota');
 select is(public.authoring_queue('reserve_ai',(select value from worker_payload where name='fence')),'true'::jsonb,'reserva repetida do mesmo job é idempotente');
 reset role;
-select is((select daily_count from private.usage_counters where user_id='a1000000-0000-4000-8000-000000000001' and kind='ai' and day=current_date),1,'cota consumida uma vez');
+select is((select count(*) from private.creation_reservations where user_id='a1000000-0000-4000-8000-000000000001' and state='reserved'),1::bigint,'uma reserva antes da validação, não uma criação consumida');
 set local role service_role;
 update private.authoring_tasks set lease_until=clock_timestamp()-interval '1 second';
 select is(public.authoring_queue('heartbeat',(select value || '{"leaseSeconds":30}'::jsonb from worker_payload where name='fence')),'false'::jsonb,'lease expirado não é renovado');
@@ -128,6 +130,6 @@ end;
 $$;
 select throws_ok($$select public.authoring_queue('enqueue',jsonb_set((select value from worker_payload where name='other-enqueue'),'{job,id}','"b1000000-0000-4000-8000-000000000011"'))$$,'P0001','Limite de dez pedidos por minuto. Aguarde antes de tentar novamente.','jobs rapidamente concluídos continuam contando na admissão por minuto');
 reset role;
-select is((select daily_count from private.usage_counters where user_id='a1000000-0000-4000-8000-000000000001' and kind='ai' and day=current_date),1,'gates de admissão não cobram operações de IA');
+select is((select count(*) from private.creation_reservations where user_id='a1000000-0000-4000-8000-000000000001' and state='consumed'),1::bigint,'somente a questão validada consome; admissão não cobra operações');
 select * from finish();
 rollback;

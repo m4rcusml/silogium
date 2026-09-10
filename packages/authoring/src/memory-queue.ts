@@ -86,6 +86,16 @@ export class MemoryAuthoringQueue implements AuthoringQueue {
     const allowed = await pending;
     if (!this.active(lease)) return false;
     if (allowed) task.aiReserved = true;
+    else {
+      const day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(this.now()));
+      task.state = "queued"; task.token = undefined; task.until = 0;
+      task.attempt = Math.max(0, task.attempt - 1);
+      task.availableAt = Date.parse(`${day}T00:00:00-03:00`) + 86_400_000;
+      this.reservations.delete(lease.job.id);
+      task.job.progress = { phase: "waiting", reason: "quota", updatedAt: new Date(this.now()).toISOString(), retryAt: new Date(task.availableAt).toISOString() };
+      task.job.error = "O pedido aguarda a renovação da cota à meia-noite de Brasília.";
+      await this.repository.saveJob(task.job);
+    }
     return allowed;
   }
   async finish(lease: JobLease, outcome: JobOutcome) {
@@ -109,9 +119,8 @@ export class MemoryAuthoringQueue implements AuthoringQueue {
   }
   async retry(lease: JobLease, error: string, permanent: boolean, options?: { deferMs?: number; refund?: boolean }) {
     const task = this.active(lease); if (!task) return false;
-    const expired = this.now() - task.admittedAt >= 86_400_000;
-    const deferred = options?.deferMs && !permanent && !expired ? options.deferMs : 0;
-    const terminal = permanent || expired || !deferred && task.attempt >= 3;
+    const deferred = options?.deferMs && !permanent ? options.deferMs : 0;
+    const terminal = permanent || !deferred && task.attempt >= 3;
     if (terminal && options?.refund && task.aiReserved) {
       await this.options.refundAi?.(task.actor, task.job.id);
       task.aiReserved = false;

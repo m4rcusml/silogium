@@ -73,7 +73,7 @@ export type GeneratedPackage = {
 };
 
 export type AuthoringJob = {
-  progress?: { phase: import("./ai-work.js").AiPhase; updatedAt: string; retryAt?: string };
+  progress?: { phase: import("./ai-work.js").AiPhase; updatedAt: string; retryAt?: string; reason?: "capacity" | "access" | "operator" | "cancelled" | "quota" };
   id: string;
   actorId: string;
   status: "running" | "completed" | "failed" | "needs_clarification" | "needs_confirmation";

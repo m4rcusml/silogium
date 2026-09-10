@@ -1,5 +1,8 @@
 import { ExecutionApiRequestSchema, ExecutionRequestSchema, prepareExecutionBundle, sanitizeExecutionResult } from "@silogium/core";
-import { createJudgeFromEnv } from "@silogium/judge";
+import { CapacityUnavailableError } from "@silogium/core";
+import { getPlatformJudge } from "@/lib/platform-judge";
+import { requireBetaAccess, BetaAccessError } from "@/lib/beta";
+import { withExecutionActor } from "@/lib/operational-capacity";
 import { getActor } from "@/lib/actor";
 import { getAuthoringRepository } from "@/lib/authoring";
 import { loadVisibleBundle } from "@/lib/bundles";
@@ -14,6 +17,7 @@ export async function POST(request: Request) {
   let chargedActor: string | undefined;
   try {
     const actor = await getActor(request);
+    await requireBetaAccess(actor);
     const text = await request.text();
     if (Buffer.byteLength(text, "utf8") > 1_048_576) throw new Error("A execução excedeu o tamanho máximo permitido.");
     const apiInput = ExecutionApiRequestSchema.parse(JSON.parse(text));
@@ -28,7 +32,7 @@ export async function POST(request: Request) {
     chargedActor = actor.id;
     let result;
     try {
-      result = sanitizeExecutionResult(await createJudgeFromEnv().evaluate(problem, bundle, input), bundle, input.kind);
+      result = sanitizeExecutionResult(await withExecutionActor(actor, () => getPlatformJudge().evaluate(problem, bundle, input)), bundle, input.kind);
     } catch (error) {
       chargedActor = undefined;
       await refundQuota(actor.id, "remote_execution");
@@ -46,7 +50,8 @@ export async function POST(request: Request) {
     return Response.json(result);
   } catch (error) {
     if (chargedActor) { try { await refundQuota(chargedActor, "remote_execution"); } catch { /* Original failure remains actionable; refund requires operational retry. */ } }
-    return Response.json({ id: crypto.randomUUID(), verdict: "system_error", score: 0, maxScore: 0, durationMs: Date.now() - startedAt, cases: [], message: error instanceof Error ? error.message : "Falha inesperada." }, { status: 400 });
+    return Response.json({ id: crypto.randomUUID(), verdict: "system_error", score: 0, maxScore: 0, durationMs: Date.now() - startedAt, cases: [], message: error instanceof Error ? error.message : "Falha inesperada." },
+      { status: error instanceof BetaAccessError || error instanceof CapacityUnavailableError ? error.statusCode : 400 });
   }
 }
 

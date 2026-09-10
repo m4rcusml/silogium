@@ -4,6 +4,7 @@ export * from "./attribution.js";
 export * from "./catalog.js";
 export * from "./publication.js";
 export * from "./quota.js";
+export * from "./capacity.js";
 export * from "./practice.js";
 export * from "./discovery.js";
 export * from "./practice-progress.js";

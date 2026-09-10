@@ -5,6 +5,12 @@ export function isHostedProduction(environment: Readonly<Record<string, string |
   return environment.NODE_ENV === "production" || environment.VERCEL_ENV === "production" || environment.VERCEL_ENV === "preview";
 }
 
+/** A shared database owns authoring admission and the creation ledger, even locally. */
+export function usesDurableAuthoring(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+  return isHostedProduction(environment) || environment.SILOGIUM_AUTHORING_MODE === "worker"
+    || Boolean(environment.NEXT_PUBLIC_SUPABASE_URL?.trim() && environment.SUPABASE_SERVICE_ROLE_KEY?.trim());
+}
+
 export class ProductionConfigurationError extends Error {
   readonly code = "production_configuration_unavailable";
   readonly status = 503;

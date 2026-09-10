@@ -1,5 +1,6 @@
 import { AiProviderError, type GroqCapacity, type CapacityDecision } from "@silogium/authoring";
 import { createSupabaseAdminClient } from "./admin";
+import { requireOperationalCapacity } from "../operational-capacity";
 
 type Client = { rpc(name: string, args: { p_action: string; p_payload: unknown }): PromiseLike<{ data: unknown; error: unknown }> };
 
@@ -16,6 +17,7 @@ export class SupabaseGroqCapacity implements GroqCapacity {
     } catch { throw new AiProviderError("unavailable", true); }
   }
   async reserve(id: string, tokens: number): Promise<CapacityDecision> {
+    await requireOperationalCapacity("groq");
     if (tokens > 8000) throw new AiProviderError("input_too_large");
     const result = await this.call("reserve", { id, tokens }) as CapacityDecision | null;
     if (!result || typeof result.allowed !== "boolean" || !result.allowed && (!Number.isFinite(result.retryAfterMs) || result.retryAfterMs! <= 0)) throw new AiProviderError("unavailable", true);

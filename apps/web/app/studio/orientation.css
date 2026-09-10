@@ -41,6 +41,14 @@
 .studio-conversations details > .button { margin-top: 12px; }
 .studio-page .authoring-form > .notice { margin: 18px 20px 0; }
 .studio-guide-content, .studio-mode-options, .studio-form-intro, .studio-result-next { overflow-wrap: anywhere; }
+.studio-beta-notice { display: grid; gap: 16px; padding: 18px 20px; margin-top: 22px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+.studio-beta-notice > div:first-child { display: grid; gap: 8px; }
+.studio-beta-notice p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.studio-beta-notice p.danger-text { color: var(--danger); }
+.studio-feature-notice { margin: 20px 0 0; display: grid; gap: 10px; overflow-wrap: anywhere; }
+.studio-feature-notice p { margin: 0; }
+.studio-job-controls { display: grid; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.studio-job-controls > p { margin: 0; }
 @media (max-width: 640px) {
   .studio-guide-content dl { grid-template-columns: 1fr; gap: 18px; }
   .studio-mode-options { grid-template-columns: 1fr; gap: 10px; }

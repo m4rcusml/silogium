@@ -1,6 +1,7 @@
-export type QuotaKind = "ai" | "remote_execution";
+// Creation allowance belongs to the transactional beta reservation ledger.
+// Do not count provider calls, searches or refinements as created questions.
+export type QuotaKind = "remote_execution";
 export const DEFAULT_QUOTAS: Record<QuotaKind, { daily: number; perMinute?: number }> = {
-  ai: { daily: 5 },
   remote_execution: { daily: 50, perMinute: 10 }
 };
 export type UsageEvent = { kind: QuotaKind; occurredAt: Date };

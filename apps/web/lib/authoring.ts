@@ -1,12 +1,13 @@
-import { AuthoringWorker, ExercismAdapter, ProblemAuthoringModule, StructuralProblemValidator, createAiAuthoringAdapterFromEnv, memoryAuthoringRepository, resolveAiProviderConfiguration, type AiAuthoringAdapter, type AuthoringRepository } from "@silogium/authoring";
+import { AuthoringWorker, JobLeaseLost, ExercismAdapter, ProblemAuthoringModule, StructuralProblemValidator, createAiAuthoringAdapterFromEnv, memoryAuthoringRepository, resolveAiProviderConfiguration, type AiAuthoringAdapter, type AuthoringRepository } from "@silogium/authoring";
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { SupabaseAuthoringRepository } from "./supabase/authoring-repository";
-import { createJudgeFromEnv } from "@silogium/judge";
-import { consumeQuota } from "./usage";
+import { getPlatformJudge } from "./platform-judge";
+import { requireBetaAccess } from "./beta";
+import { requireOperationalCapacity, withExecutionActor } from "./operational-capacity";
 import { getConversationRepository } from "./conversations";
 import { SupabaseAuthoringQueue } from "./supabase/authoring-queue";
 import { SupabaseGroqCapacity } from "./supabase/groq-capacity";
-import { assertProductionServerConfig, isHostedProduction } from "./production-config";
+import { assertProductionServerConfig, isHostedProduction, usesDurableAuthoring } from "./production-config";
 
 const deferredAi: AiAuthoringAdapter = {
   create: async () => { throw new Error("A autoria deve ser processada pelo worker."); },
@@ -29,8 +30,9 @@ export function getAuthoringRepository(): AuthoringRepository {
 
 export function getAuthoringModule(): ProblemAuthoringModule {
   assertProductionServerConfig();
-  const hosted = isHostedProduction();
-  const durable = hosted || process.env.SILOGIUM_AUTHORING_MODE === "worker";
+  // A shared database also owns the beta ledger, even from a local web server.
+  // Only the isolated, in-memory demo may execute authoring inline.
+  const durable = usesDurableAuthoring();
   if (durable && !createSupabaseAdminClient()) throw new Error("O processamento durável exige Supabase.");
   const mode = durable ? `durable:${process.env.SILOGIUM_AUTHORING_ENABLED === "true"}` : "local";
   if (globalModules.__silogiumAuthoringMode === mode && globalModules.__silogiumAuthoringModule instanceof ProblemAuthoringModule) return globalModules.__silogiumAuthoringModule;
@@ -41,11 +43,11 @@ export function getAuthoringModule(): ProblemAuthoringModule {
     getAuthoringRepository(),
     ai,
     [new ExercismAdapter()],
-    new StructuralProblemValidator(createJudgeFromEnv()),
+    new StructuralProblemValidator(getPlatformJudge()),
     !durable,
     async (actor) => {
-      const quota = await consumeQuota(actor.id, "ai");
-      if (!quota.allowed) throw new Error("Sua cota diária de IA terminou. Tente novamente amanhã.");
+      await requireBetaAccess(actor);
+      await requireOperationalCapacity("groq");
     },
     getConversationRepository(),
     undefined,
@@ -65,6 +67,8 @@ export function getAuthoringWorker(): AuthoringWorker {
   if (isHostedProduction() && (!process.env.MODAL_JUDGE_ENDPOINT || !process.env.MODAL_JUDGE_TOKEN)) throw new Error("Configure o judge remoto antes de processar autoria em produção.");
   const queue = new SupabaseAuthoringQueue();
   const module = new ProblemAuthoringModule(getAuthoringRepository(), createAiAuthoringAdapterFromEnv(process.env, { capacity: new SupabaseGroqCapacity() }), [new ExercismAdapter()],
-    new StructuralProblemValidator(createJudgeFromEnv()), false, undefined, getConversationRepository());
-  return new AuthoringWorker(queue, (lease, work) => module.processQueuedJob(lease, work), { workerId: process.env.SILOGIUM_WORKER_ID });
+    new StructuralProblemValidator(getPlatformJudge()), false, undefined, getConversationRepository());
+  return new AuthoringWorker(queue, (lease, work) => withExecutionActor(lease.actor,
+    () => module.processQueuedJob(lease, work),
+    async () => { if (!await queue.heartbeat(lease, 120)) throw new JobLeaseLost(); }), { workerId: process.env.SILOGIUM_WORKER_ID });
 }

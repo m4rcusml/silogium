@@ -29,11 +29,12 @@ export function deploymentReadiness(environment: NodeJS.ProcessEnv, target: "web
       && (!environment.GROQ_AUTHORING_MODEL || environment.GROQ_AUTHORING_MODEL === "openai/gpt-oss-120b"),
       "Configure groq, GROQ_API_KEY e openai/gpt-oss-120b no worker. Não há fallback para outro provedor.");
   }
-  if (environment.SILOGIUM_AUTHORING_ENABLED === "true") checks.push({ id: "worker-live", status: "manual", message: "Comprovar worker ativo, recuperação após interrupção e migração de fila aplicada. A flag não comprova isso." });
+  if (environment.SILOGIUM_AUTHORING_ENABLED === "true") checks.push({ id: "worker-live", status: "manual", message: "Comprovar wake autenticado, worker sob demanda, leitura de faturamento no contexto Modal, recuperação e migrações 014/015. A flag não comprova isso." });
   else checks.push({ id: "ai-disabled", status: "ok", message: "Studio sem novas operações de IA; catálogo, resolução e histórico não dependem de uma chave de IA." });
   const publicSecretNames = Object.keys(environment).filter((key) => key.startsWith("NEXT_PUBLIC_") && /(?:SECRET|SERVICE_ROLE|API_KEY|AUTH_TOKEN|PASSWORD)/.test(key) && environment[key]);
   check("public-secrets", publicSecretNames.length === 0, "Não colocar chaves de servidor, senhas ou tokens em variáveis NEXT_PUBLIC_.");
   checks.push({ id: "integration", status: "manual", message: "Validar migrações/pgTAP, OAuth com duas contas, RLS, seeds privados, limites reais do Modal e restauração de backup em staging." });
+  checks.push({ id: "beta-capacity", status: "manual", message: "Confirmar limites financeiros nativos do Modal, ciclo e créditos gratuitos; atestação e consumo recente no ledger. Para o smoke autorizado, teto interno de US$ 1. Código/configuração não comprova ausência de cobrança." });
   checks.push({ id: "judge-policy", status: "manual", message: environment.SILOGIUM_VERIFIED_JUDGE_POLICY
     ? "Política oficial configurada: exigir evidências da auditoria do runner e dos bundles antes de publicar."
     : "Política oficial desabilitada: manter assim até a auditoria; accepted sozinho não concede progresso oficial." });

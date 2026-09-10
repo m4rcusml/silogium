@@ -38,4 +38,10 @@ describe("diagnóstico de preparação offline", () => {
     expect(studioAvailability({ NODE_ENV: "development", SILOGIUM_AI_PROVIDER: "local" }))
       .toEqual({ available: true, providerLabel: "Simulador local" });
   });
+  it("desenvolvimento com banco respeita a mesma ativação e fila da produção", () => {
+    const localDatabase = { NODE_ENV: "development", NEXT_PUBLIC_SUPABASE_URL: "https://db.example.test", SUPABASE_SERVICE_ROLE_KEY: "server-test" };
+    expect(studioAvailability(localDatabase).available).toBe(false);
+    expect(studioAvailability({ ...localDatabase, SILOGIUM_AUTHORING_ENABLED: "true" }))
+      .toEqual({ available: true, providerLabel: "Processamento em segundo plano" });
+  });
 });

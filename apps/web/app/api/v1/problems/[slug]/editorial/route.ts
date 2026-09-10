@@ -1,6 +1,8 @@
 import type { SaveEditorialDraft } from "@silogium/authoring";
 import { getActor } from "@/lib/actor";
 import { editorialError, getEditorial, readEditorialBody } from "./service";
+import { requireBetaAccess } from "@/lib/beta";
+import { withExecutionActor } from "@/lib/operational-capacity";
 
 type Context = { params: Promise<{ slug: string }> };
 
@@ -27,7 +29,10 @@ export async function POST(request: Request, { params }: Context) {
     const actor = await getActor(request);
     const { slug } = await params;
     const body = await readEditorialBody(request);
-    if (body.action === "validate") return Response.json(await getEditorial().validateDraft(slug, actor, body.expectedRevision as number), { headers: { "cache-control": "private, no-store" } });
+    if (body.action === "validate") {
+      await requireBetaAccess(actor);
+      return Response.json(await withExecutionActor(actor, () => getEditorial().validateDraft(slug, actor, body.expectedRevision as number)), { headers: { "cache-control": "private, no-store" } });
+    }
     if (body.action === "publication") return Response.json(await getEditorial().submitPublication(slug, actor, body.expectedRevision as number, body.licensesAccepted === true), { headers: { "cache-control": "private, no-store" } });
     throw new Error("Ação editorial inválida.");
   } catch (error) { return editorialError(error); }

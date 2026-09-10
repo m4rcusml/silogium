@@ -1,0 +1,31 @@
+.admin-sections { display: grid; gap: 32px; }
+.admin-section { display: grid; gap: 20px; min-width: 0; }
+.beta-panel { display: grid; gap: 24px; min-width: 0; overflow-wrap: anywhere; }
+.beta-panel .button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.beta-panel header { display: grid; gap: 8px; }
+.beta-panel p, .beta-panel h2, .beta-panel ul { margin: 0; }
+.beta-panel .notice { margin-bottom: 0; display: grid; gap: 12px; }
+.beta-invite { display: flex; align-items: flex-start; gap: 16px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+.beta-invite > .field { flex: 1; min-width: 0; }
+.beta-invite > button { margin-top: 28px; flex-shrink: 0; }
+.beta-invite .muted { font-size: 13px; line-height: 1.6; }
+.beta-list-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.beta-list-heading .field { min-width: 220px; }
+.beta-participants, .beta-invitations { padding: 0; list-style: none; display: grid; gap: 12px; }
+.beta-participants > li { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius); }
+.beta-participants > li > div:first-child { display: grid; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
+.beta-participants .muted, .beta-invitations .muted { font-size: 13px; }
+.beta-invitations { padding-top: 16px; }
+.beta-invitations li { display: grid; gap: 8px; }
+.beta-panel summary { cursor: pointer; padding: 8px 0; }
+.capacity-services { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.capacity-services article { display: grid; gap: 20px; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius); min-width: 0; }
+.capacity-services article > div:first-child { display: grid; gap: 10px; }
+.capacity-services h3 { margin: 0; }
+.capacity-services .button { white-space: normal; text-align: left; }
+@media (max-width: 700px) {
+  .capacity-services { grid-template-columns: 1fr; }
+  .beta-invite, .beta-participants > li { flex-direction: column; align-items: stretch; }
+  .beta-invite > button { margin-top: 0; }
+  .beta-panel { gap: 20px; }
+}

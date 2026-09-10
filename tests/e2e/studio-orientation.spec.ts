@@ -156,10 +156,11 @@ test("Nova questão em Minhas questões abre de fato o modo de criação", async
 
 test("falha de abertura do refinamento permite recuperar sem criar um pedido", async ({ page }) => {
   const activity = await mockStudio(page);
-  let consultations = 0;
+  let draftAvailable = false;
   await page.route("**/api/v1/problems/fila/editorial", (route) => {
-    consultations += 1;
-    return consultations === 1
+    // Development remounts may abort the first GET. Keep the service unavailable
+    // until the recovery step, rather than counting requests the UI never received.
+    return !draftAvailable
       ? route.fulfill({ status: 503, json: { error: "Consulta indisponível." } })
       : route.fulfill({ json: { revision: 2, phase: "draft", problem: { slug: "fila", title: "Fila de eventos" } } });
   });
@@ -168,11 +169,11 @@ test("falha de abertura do refinamento permite recuperar sem criar um pedido", a
   await expect(page.getByText("Carregando rascunho…", { exact: false })).toHaveCount(0);
   await page.getByRole("textbox", { name: "O que deve mudar nesta questão?" }).fill("Esclareça o desempate.");
   await expect(page.getByRole("button", { name: "Refinar com IA", exact: true })).toBeDisabled();
+  draftAvailable = true;
   await page.getByRole("button", { name: "Tentar abrir rascunho novamente" }).click();
   await expect(page.getByText("Refinando “Fila de eventos”, revisão 2.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Refinar com IA", exact: true })).toBeEnabled();
   expect(activity.requests).toEqual([]);
-  expect(consultations).toBe(2);
 });
 
 test("importação impede troca de contexto até a confirmação do recebimento", async ({ page }) => {

@@ -53,4 +53,10 @@ describe("factory hospedada sem IA real", () => {
     expect(calls.rpc).toHaveBeenCalledWith("authoring_queue", expect.objectContaining({ p_action: "enqueue" }));
     expect(calls.aiFactory).not.toHaveBeenCalled();
   });
+  it("desenvolvimento com Supabase também passa pela fila e pela reserva de criação", async () => {
+    vi.stubEnv("NODE_ENV", "development"); vi.stubEnv("VERCEL_ENV", ""); vi.stubEnv("SILOGIUM_AUTHORING_ENABLED", "true");
+    await getAuthoringModule().request(input, actor);
+    expect(calls.rpc).toHaveBeenCalledWith("authoring_queue", expect.objectContaining({ p_action: "enqueue" }));
+    expect(calls.aiFactory).not.toHaveBeenCalled();
+  });
 });

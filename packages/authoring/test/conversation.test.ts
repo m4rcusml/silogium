@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Actor, ContentRequest } from "@silogium/core";
 import { ExercismAdapter, LocalAiAdapter, MemoryAuthoringRepository, MemoryConversationRepository, ProblemAuthoringModule, ProblemEditorial,
   conversationContext, formatConversationContext, parseAuthoringRequest, type AiAuthoringAdapter, type ConversationTurn, type GeneratedPackage } from "../src/index.js";
@@ -30,6 +30,9 @@ function setup(background = false) {
   const module = new ProblemAuthoringModule(repository, { create, refine, searchWeb, importLicensed }, [new ExercismAdapter()], validator, background, beforeAi, conversations, editorial);
   return { module, repository, conversations, create, refine, searchWeb, importLicensed, beforeAi, validator, editorial };
 }
+// Conversation tests exercise context/ownership, not availability of GitHub.
+// Import tests below replace this external boundary with their licensed snapshot.
+beforeEach(() => { vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("", { status: 503 })); });
 afterEach(() => vi.restoreAllMocks());
 
 describe("histórico do Studio", () => {

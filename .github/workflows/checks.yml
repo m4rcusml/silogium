@@ -49,6 +49,8 @@ jobs:
         run: npm test
       - name: Offline Python sandbox-controller tests
         run: python -m unittest discover -s infra/modal -p "test_*.py" -v
+      - name: Offline Python worker-control tests
+        run: npm run test:worker:controller
       - name: Install pinned SDKs only for declaration smoke
         run: python -m pip install -r infra/modal/requirements-deploy.txt
       - name: Load Modal definitions with network blocked

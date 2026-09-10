@@ -9,6 +9,15 @@ local não são integrações implementadas neste repositório.
 
 ## Estado publicado e evidências
 
+**Beta preparado localmente, ainda não publicado:** lista de espera, duas criações
+validadas por dia, convites administrativos, pausas preservando checkpoints e
+worker sob demanda. As migrações 014/015 foram exercitadas em transações revertidas;
+a tabela abaixo continua descrevendo a produção anterior. As travas nativas do
+Modal foram conferidas após ajuste: US$ 30 de limite bruto e créditos, resultando
+em US$ 0 líquido pelo padrão documentado. A ativação operacional ainda precisa
+ser verificada. Procedimento, regras e limite interno de US$ 1 para o smoke em
+[beta fechado](./beta-closed.md).
+
 | Componente | Estado verificado em 10/09/2026 |
 | --- | --- |
 | Vercel | Production READY, commit `624489f1744189b59156e711165085627afd2c7a`; deployment `dpl_HEwWNacuR4f1NizwPT48hgCFpjJP` |
@@ -76,7 +85,7 @@ não integram o artefato enviado.
 | Persistência/Auth | Demo em memória ou Supabase explícito | Supabase obrigatório + GitHub OAuth |
 | Autoria | Groq ou simulador determinístico | Worker durável separado, Groq 120b |
 | Judge | Subprocesso local, somente código confiável | Controlador Modal v2 + sandbox nova por caso |
-| Fila | Integrada por padrão; worker opcional com banco | Tabela transacional privada no Supabase |
+| Fila | Integrada somente sem banco; com Supabase exige worker | Tabela transacional privada no Supabase |
 | Progresso oficial | Demo não concede marcos oficiais | Evidência persistida + bundles privados + política auditada |
 
 Nenhuma assinatura pessoal Codex/ChatGPT é colocada no backend público.

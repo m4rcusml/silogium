@@ -32,30 +32,30 @@ select ok(has_column_privilege('authenticated','public.profiles','handle','UPDAT
 
 set local role anon;
 select set_config('request.jwt.claims','{"role":"anon"}',true);
-select is((select count(*) from public.problems),1::bigint,'anônimo lê catálogo sem chamar helper proibido');
-select is((select count(*) from public.problem_versions),1::bigint,'anônimo lê só versão publicada, não rascunho em revisão');
-select is((select count(*) from public.problem_sources),1::bigint,'atribuição pública funciona sem avaliar policy administrativa');
+select is((select count(*) from public.problems where id in ('c2000000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000002')),1::bigint,'anônimo lê catálogo sem chamar helper proibido');
+select is((select count(*) from public.problem_versions where problem_id in ('c2000000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000002')),1::bigint,'anônimo lê só versão publicada, não rascunho em revisão');
+select is((select count(*) from public.problem_sources where problem_id in ('c2000000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000002')),1::bigint,'atribuição pública funciona sem avaliar policy administrativa');
 select throws_ok($$select private.is_admin()$$,'42501',null,'chamada direta ao helper privado permanece proibida');
 reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated","sub":"c1000000-0000-4000-8000-000000000001"}',true);
-select is((select count(*) from public.problems),2::bigint,'dono lê pública e privada com grants explícitos');
-select is((select count(*) from public.problem_versions),3::bigint,'dono lê revisões próprias');
-select is((select count(*) from public.problem_sources),2::bigint,'dono lê atribuição de questão privada');
+select is((select count(*) from public.problems where id in ('c2000000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000002')),2::bigint,'dono lê pública e privada com grants explícitos');
+select is((select count(*) from public.problem_versions where problem_id in ('c2000000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000002')),3::bigint,'dono lê revisões próprias');
+select is((select count(*) from public.problem_sources where problem_id in ('c2000000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000002')),2::bigint,'dono lê atribuição de questão privada');
 select lives_ok($$update public.profiles set handle='explicit-owner-updated' where id='c1000000-0000-4000-8000-000000000001'$$,'grant por coluna permite alterar o próprio handle');
 select throws_ok($$update public.profiles set role='admin' where id='c1000000-0000-4000-8000-000000000001'$$,'42501',null,'grant por coluna não permite mudar role');
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated","sub":"c1000000-0000-4000-8000-000000000002"}',true);
-select is((select count(*) from public.problems),1::bigint,'grants não anulam isolamento por proprietário');
-select is((select count(*) from public.problem_versions),1::bigint,'outra conta não vê a revisão privada da questão pública');
+select is((select count(*) from public.problems where id in ('c2000000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000002')),1::bigint,'grants não anulam isolamento por proprietário');
+select is((select count(*) from public.problem_versions where problem_id in ('c2000000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000002')),1::bigint,'outra conta não vê a revisão privada da questão pública');
 reset role;
 
 -- Verify adapter operations under the actual database role, not only ACL strings.
 set local role service_role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
-select is((select count(*) from public.problems),2::bigint,'servidor lê dados necessários sem depender de defaults');
+select is((select count(*) from public.problems where id in ('c2000000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000002')),2::bigint,'servidor lê dados necessários sem depender de defaults');
 select lives_ok($$insert into public.problems(id,slug,owner_id,origin,visibility,status,title,summary,difficulty,format,runtimes,fingerprint)
  values('c2000000-0000-4000-8000-000000000003','explicit-server','c1000000-0000-4000-8000-000000000001','native','private','validated','Server','Server fixture','easy','classic',array['python'],'explicit-server')$$,'servidor insere questão');
 select lives_ok($$insert into public.problem_versions(problem_id,version,definition,created_by)

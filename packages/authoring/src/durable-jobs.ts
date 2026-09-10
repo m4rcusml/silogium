@@ -1,4 +1,4 @@
-import type { Actor } from "@silogium/core";
+import { CapacityUnavailableError, type Actor } from "@silogium/core";
 import type { Conversation, ConversationTurn } from "./conversation.js";
 import type { EditorialRecord } from "./editorial-types.js";
 import type { AuthoringJob, GeneratedPackage, SearchCandidate } from "./types.js";
@@ -32,6 +32,7 @@ export interface AuthoringQueue {
 export class JobLeaseLost extends Error { constructor() { super("O processamento foi retomado por outro worker."); } }
 export class PermanentAuthoringError extends Error {}
 function safeFailure(error: unknown): string {
+  if (error instanceof CapacityUnavailableError) return error.message;
   if (error instanceof AiProviderError) return error.message;
   const message = error instanceof Error ? error.message : "";
   if (error instanceof PermanentAuthoringError && message.startsWith("Sua cota diária")) return "Sua cota diária de IA terminou. Tente novamente amanhã.";
@@ -85,7 +86,9 @@ export class AuthoringWorker {
       },
       beforeAi: async () => {
         assertLease();
-        if (!await this.queue.reserveAi(lease)) throw new PermanentAuthoringError("Sua cota diária de IA terminou. Tente novamente amanhã.");
+        // A denied reservation also fences this lease: the queue has durably
+        // scheduled quota renewal or paused revoked access. Do not overwrite it.
+        if (!await this.queue.reserveAi(lease)) throw new JobLeaseLost();
       }
     };
     try {
@@ -96,9 +99,11 @@ export class AuthoringWorker {
       if (lost || error instanceof JobLeaseLost) return "lease_lost";
       // A lost response after COMMIT is harmless: retry's old token cannot change the terminal job.
       const provider = error instanceof AiProviderError;
+      const capacity = error instanceof CapacityUnavailableError;
       const permanent = error instanceof PermanentAuthoringError || provider && !error.retryable;
       return await this.queue.retry(lease, safeFailure(error), permanent, {
         ...(provider && error.code === "rate_limit" ? { deferMs: Math.min(86_400_000, Math.max(1000, error.retryAfterMs)) } : {}),
+        ...(capacity ? { deferMs: error.retryAfterMs() } : {}),
         refund: provider && error.code !== "invalid_output" && error.code !== "input_too_large" || !provider && !(error instanceof PermanentAuthoringError)
       }) ? "retry" : "lease_lost";
     } finally { clearInterval(timer); }

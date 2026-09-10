@@ -1,5 +1,5 @@
--- Run against migrated PostgreSQL. TypeScript mocks do not validate transactions/RLS.
 begin;
+-- Run against migrated PostgreSQL. TypeScript mocks do not validate transactions/RLS.
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 select no_plan();
@@ -20,6 +20,7 @@ select throws_ok($$select public.groq_capacity('reserve','{"id":"c2000000-0000-4
 reset role;
 
 insert into auth.users(id,email,raw_user_meta_data) values('a2000000-0000-4000-8000-000000000001','groq-owner@silogium.test','{"user_name":"groq-owner"}');
+update private.beta_participants set state='approved' where user_id='a2000000-0000-4000-8000-000000000001';
 create temporary table groq_fence(value jsonb); grant all on groq_fence to service_role;
 set local role service_role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
@@ -37,7 +38,7 @@ select is(public.authoring_queue('reserve_ai',(select value from groq_fence)),'t
 select is(public.authoring_queue('retry',(select value || '{"permanent":true,"refund":true}'::jsonb from groq_fence)),'true'::jsonb,'terminal infrastructure failure refunds');
 select is(public.authoring_queue('retry',(select value || '{"permanent":true,"refund":true}'::jsonb from groq_fence)),'false'::jsonb,'refund cannot be repeated by old worker');
 reset role;
-select is((select daily_count from private.usage_counters where user_id='a2000000-0000-4000-8000-000000000001' and kind='ai' and day=current_date),0,'user quota refunded exactly once');
+select is((select count(*) from private.creation_reservations where user_id='a2000000-0000-4000-8000-000000000001' and state in ('reserved','consumed')),0::bigint,'user reservation released exactly once');
 
 -- Exercise the real queue through three attempts; only the retry clock is advanced.
 create function pg_temp.groq_third_attempt(requested_id uuid) returns jsonb language plpgsql as $$
@@ -69,38 +70,38 @@ set local role service_role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 delete from groq_fence;
 insert into groq_fence select pg_temp.groq_third_attempt('b2000000-0000-4000-8000-000000000002');
-select is(public.authoring_queue('retry',(select value || '{"error":"invalid output","permanent":true,"refund":false}'::jsonb from groq_fence)), 'true'::jsonb, 'third-attempt business failure is terminal without refund');
+select is(public.authoring_queue('retry',(select value || '{"error":"invalid output","permanent":true,"refund":false}'::jsonb from groq_fence)), 'true'::jsonb, 'third-attempt invalid content is terminal but never counts as a validated creation');
 -- Inspect the private ledger as the test owner; RPC calls must still exercise
 -- service_role. Do not expand application ACLs merely to inspect a fixture.
 reset role;
-select is((select daily_count from private.usage_counters where user_id='a2000000-0000-4000-8000-000000000001' and kind='ai' and day=current_date), 1, 'business failure retains the single reserved operation');
+select is((select count(*) from private.creation_reservations where user_id='a2000000-0000-4000-8000-000000000001' and state in ('reserved','consumed')), 0::bigint, 'invalid generated content releases its reservation');
 set local role service_role;
 select is(public.authoring_queue('claim','{"workerId":"groq-recovery-test","leaseSeconds":120}'), null::jsonb, 'claim has no queued work after business failure');
 reset role;
-select is((select daily_count from private.usage_counters where user_id='a2000000-0000-4000-8000-000000000001' and kind='ai' and day=current_date), 1, 'claim cannot override explicit refund false on a third-attempt failure');
+select is((select count(*) from private.creation_reservations where user_id='a2000000-0000-4000-8000-000000000001' and state in ('reserved','consumed')), 0::bigint, 'claim does not re-charge terminal validation failure');
 set local role service_role;
-select is((select ai_refunded from private.authoring_tasks where job_id='b2000000-0000-4000-8000-000000000002'), false, 'business failure is not marked refunded');
+select is((select state from private.creation_reservations where job_id='b2000000-0000-4000-8000-000000000002'), 'released', 'business failure has no successful creation charge');
 
 delete from groq_fence;
 insert into groq_fence select pg_temp.groq_third_attempt('b2000000-0000-4000-8000-000000000003');
 reset role;
-select is((select daily_count from private.usage_counters where user_id='a2000000-0000-4000-8000-000000000001' and kind='ai' and day=current_date), 2, 'crashing job reserved only one additional operation across retries');
+select is((select count(*) from private.creation_reservations where user_id='a2000000-0000-4000-8000-000000000001' and state='reserved'), 1::bigint, 'crashing job holds one reservation across retries');
 set local role service_role;
 select is(public.authoring_queue('claim','{"workerId":"groq-recovery-test","leaseSeconds":120}'), null::jsonb, 'a valid final lease is not recovered early');
 select is((select state from private.authoring_tasks where job_id='b2000000-0000-4000-8000-000000000003'), 'leased', 'claim preserves the active final attempt');
 reset role;
-select is((select daily_count from private.usage_counters where user_id='a2000000-0000-4000-8000-000000000001' and kind='ai' and day=current_date), 2, 'active final lease keeps its reservation');
+select is((select count(*) from private.creation_reservations where user_id='a2000000-0000-4000-8000-000000000001' and state='reserved'), 1::bigint, 'active final lease keeps its reservation');
 set local role service_role;
 update private.authoring_tasks set lease_until = clock_timestamp() - interval '1 second' where job_id='b2000000-0000-4000-8000-000000000003';
 select is(public.authoring_queue('claim','{"workerId":"groq-recovery-test","leaseSeconds":120}'), null::jsonb, 'expired final lease is not claimed again');
 select is((select state from private.authoring_tasks where job_id='b2000000-0000-4000-8000-000000000003'), 'failed', 'worker death on the final attempt becomes terminal');
-select is((select ai_refunded from private.authoring_tasks where job_id='b2000000-0000-4000-8000-000000000003'), true, 'expired final lease is refunded');
+select is((select state from private.creation_reservations where job_id='b2000000-0000-4000-8000-000000000003'), 'released', 'expired final lease releases creation reservation');
 reset role;
-select is((select daily_count from private.usage_counters where user_id='a2000000-0000-4000-8000-000000000001' and kind='ai' and day=current_date), 1, 'only the infrastructure failure is refunded');
+select is((select count(*) from private.creation_reservations where user_id='a2000000-0000-4000-8000-000000000001' and state in ('reserved','consumed')), 0::bigint, 'no failed generation remains charged');
 set local role service_role;
 select is(public.authoring_queue('retry',(select value || '{"permanent":true,"refund":true}'::jsonb from groq_fence)), 'false'::jsonb, 'dead worker cannot refund again with its stale fence');
 select is(public.authoring_queue('claim','{"workerId":"groq-recovery-test","leaseSeconds":120}'), null::jsonb, 'claim recovery replay is harmless');
 reset role;
-select is((select daily_count from private.usage_counters where user_id='a2000000-0000-4000-8000-000000000001' and kind='ai' and day=current_date), 1, 'replayed recovery preserves the charged business failure');
+select is((select count(*) from private.creation_reservations where user_id='a2000000-0000-4000-8000-000000000001' and state in ('reserved','consumed')), 0::bigint, 'replayed recovery never restores a released charge');
 select * from finish();
 rollback;

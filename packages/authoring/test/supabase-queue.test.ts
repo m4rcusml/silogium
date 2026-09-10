@@ -50,4 +50,23 @@ describe("adapter RPC da fila", () => {
     const payload = rpc.mock.calls[0]![1] as { p_payload: { outcome: JobOutcome } };
     expect(payload.p_payload.outcome.effects.candidates).toEqual([]);
   });
+  it("notifica somente depois do commit; falha ao acordar não desfaz o job", async () => {
+    const order: string[] = [];
+    const rpc = vi.fn(async () => { order.push("commit"); return { data: true, error: null }; });
+    const wake = vi.fn(async () => { order.push("wake"); throw new Error("notification unavailable"); });
+    const queue = new SupabaseAuthoringQueue(() => ({ rpc }), wake);
+    await expect(queue.enqueue(job, actor)).resolves.toBeUndefined();
+    expect(order).toEqual(["commit", "wake"]);
+    await expect(queue.confirm(job.id, actor.id)).resolves.toBe(true);
+    expect(wake).toHaveBeenCalledTimes(2);
+  });
+  it("commit recusado ou confirmação falsa não acorda worker", async () => {
+    const rpc = vi.fn(async () => ({ data: false, error: null as { message: string } | null }));
+    const wake = vi.fn(async () => undefined);
+    const queue = new SupabaseAuthoringQueue(() => ({ rpc }), wake);
+    expect(await queue.confirm(job.id, actor.id)).toBe(false);
+    rpc.mockResolvedValue({ data: false, error: { message: "rejected" } });
+    await expect(queue.enqueue(job, actor)).rejects.toThrow("rejected");
+    expect(wake).not.toHaveBeenCalled();
+  });
 });

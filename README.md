@@ -36,7 +36,7 @@ O repositório começou como um simulador de avaliações progressivas e agora �
 - Perfil editável, apresentação pública opt-in, metas semanais e conquistas pessoais condicionadas a evidência oficial; demo não concede conquistas.
 - Dicas, soluções e discussões com spoilers explícitos, moderação, denúncias e proteção contra aprovação de uma revisão obsoleta.
 
-O estado detalhado, testes e limites estão em [docs/platform-completion-plan.md](docs/platform-completion-plan.md). **Ainda não está liberado para deploy público:** faltam integração real com Supabase/OAuth, worker durável, verificação de isolamento do judge remoto e controles operacionais. As migrações 003–009 e respectivos pgTAP foram preparados, não aplicados em um banco nesta etapa. A configuração em memória perde dados no reinício.
+O estado publicado está em [deploy e operação](docs/DEPLOYMENT.md): catálogo, OAuth e judge remoto já possuem verificação inicial. A autoria pública segue desativada até a ativação controlada do worker e das proteções financeiras. O código do [beta fechado](docs/beta-closed.md) inclui lista de espera, convites administrativos, duas criações validadas por dia e pausas com retomada. Isso não substitui homologação completa de isolamento, custos e recuperação. A demonstração em memória perde dados no reinício.
 
 O catálogo inicial contém **seis questões: três progressivas e três clássicas**, todas em TypeScript e Python. As três originais do simulador estão preservadas em `ProblemDefinitionV1`. As clássicas são **Pacotes complementares**, **Janelas de manutenção** e **Rotas da estação**. Os testes versionados no Git são públicos; não devem ser tratados como secretos. Testes oficiais privados das progressivas ficam fora do repositório e são enviados ao schema privado do Supabase. Veja [o conteúdo das clássicas](docs/classic-seeds.md).
 
@@ -64,11 +64,11 @@ Requisitos: Node `22.22`, npm e Python `3.13.11`.
 git clone https://github.com/m4rcusml/silogium.git
 cd silogium
 npm install
-Copy-Item .env.example .env.local
+Copy-Item .env.example apps/web/.env.local
 npm run dev
 ```
 
-Abra `http://localhost:3000`. O `.env.example` usa o Codex como padrão de desenvolvimento; ele reaproveita o login local do ChatGPT e consome a franquia do seu plano. Use `SILOGIUM_AI_PROVIDER=local` quando quiser o gerador determinístico sem chamadas externas.
+Abra `http://localhost:3000`. O `.env.example` configura Groq; preencha a chave ou use `SILOGIUM_AI_PROVIDER=local` para o gerador determinístico sem chamadas externas. Com Supabase configurado, a autoria usa sempre a fila durável e exige um worker separado; somente a demonstração sem banco funciona integrada. Não usa a assinatura pessoal do ChatGPT.
 
 Comandos de qualidade:
 
@@ -251,7 +251,7 @@ Importações mantêm a licença da fonte e separam autores, contribuidores, URL
 
 ## Deploy no Vercel
 
-Importe o repositório na Vercel, mantenha a raiz do projeto no repositório e use o `vercel.json` incluído. Configure Supabase e Modal na web; a chave Groq pertence somente ao worker. Em produção, execução local fica desabilitada; sem `MODAL_JUDGE_ENDPOINT`, o sistema retorna `system_error` sem consumir cota.
+O projeto publicado usa `apps/web` como raiz e `apps/web/vercel.json`; siga [deploy e operação](docs/DEPLOYMENT.md). Configure Supabase e Modal na web; a chave Groq pertence somente ao worker. Em produção, execução local fica desabilitada; sem `MODAL_JUDGE_ENDPOINT`, o sistema retorna `system_error` sem consumir cota. As proteções do beta precisam estar configuradas antes de habilitar novos pedidos remotos.
 
 Antes do deploy:
 

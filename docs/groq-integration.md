@@ -83,18 +83,21 @@ Seu consumo pode exceder a estimativa de uma chamada: contabilizamos o total
 retornado e pausamos chamadas posteriores, sem prometer um teto por pesquisa.
 
 - 429: respeita `Retry-After`/reset de tokens; worker devolve à fila com data de
-  próxima tentativa, sem consumir uma das três tentativas de falha. Jobs antigos
-  não são adiados indefinidamente (janela de admissão de 24h).
+  próxima tentativa, sem consumir uma das três tentativas de falha. No beta,
+  pausas de capacidade preservam checkpoints mesmo depois de 24 horas; somente
+  falhas definitivas ou cancelamento encerram o pedido.
 - Timeouts/5xx: até três tentativas do worker; o transporte não multiplica retries.
 - 401/403/modelo indisponível, contexto excessivo ou saída inválida final: falha
   explícita, sem outro modelo/provedor. Corpos de erro não chegam ao usuário.
 - Limites padrão: 90s por chamada, 2 MiB de resposta, aproximadamente 5.000 tokens
   de entrada e até 2.400 de saída. Pedidos/importações grandes são recusados;
   fontes licenciadas **não são truncadas silenciosamente**.
-- Cota do usuário: reserva única por job durável; falhas finais de infraestrutura
-  devolvem essa reserva de forma idempotente e na data original. Isso não devolve
-  tokens à Groq. O fluxo integrado de demo mantém a cota local existente; para
-  testar devolução transacional e recuperação após reinício, use o worker/Supabase.
+- Cota do participante: duas novas questões nativas validadas por dia de Brasília;
+  reserva única por criação, liberada em falha definitiva/cancelamento. Pesquisa,
+  importação e refinamento não gastam essa cota. Administradores são isentos da
+  cota diária, não dos limites técnicos e gratuitos. Isso não devolve tokens à
+  Groq. Somente o fluxo com Supabase/worker tem reserva transacional persistida;
+  a demonstração em memória não comprova a política do beta. Veja [beta](./beta-closed.md).
 - Sem worker, o desenvolvimento integrado espera até dez minutos por fase para
   capacidade; reiniciar o processo perde jobs em memória. Produção não usa isso.
 
