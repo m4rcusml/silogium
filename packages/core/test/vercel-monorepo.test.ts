@@ -19,7 +19,9 @@ describe("Vercel Git deployment from apps/web", () => {
   });
 
   it("keeps secrets and source visibility out of the build configuration", () => {
-    expect(config.public).toBe(false);
+    // Source visibility belongs to the Vercel project (publicSource=false),
+    // not vercel.json: the provider schema rejects the legacy `public` key.
+    expect(Object.keys(config).sort()).toEqual(["$schema", "buildCommand", "framework", "installCommand", "outputDirectory"]);
     expect(config).not.toHaveProperty("env");
     expect(config).not.toHaveProperty("builds");
     expect(config).not.toHaveProperty("crons");
