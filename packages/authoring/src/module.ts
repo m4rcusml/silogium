@@ -6,6 +6,7 @@ import { MemoryConversationRepository, conversationContext, parseAuthoringReques
 import { ProblemEditorial } from "./editorial.js";
 import { randomBytes } from "node:crypto";
 import type { AuthoringQueue, JobLease, JobOutcome, JobWork } from "./durable-jobs.js";
+import { withAiWork } from "./ai-work.js";
 
 export class ProblemAuthoringModule implements ProblemAuthoring {
   constructor(
@@ -78,10 +79,19 @@ export class ProblemAuthoringModule implements ProblemAuthoring {
   }
 
   private async processJob(job: AuthoringJob, actor: Actor, confirmed = false, work?: JobWork): Promise<void> {
+    const repairBudget = {};
     const request = job.request;
-    const step = <T>(key: string, compute: () => Promise<T>) => work ? work.step(key, compute) : compute();
+    const progress = async (phase: import("./ai-work.js").AiPhase) => {
+      job.progress = { phase, updatedAt: new Date().toISOString() };
+      if (!work) await this.repository.saveJob(job);
+    };
+    const step = <T>(key: string, compute: () => Promise<T>) => {
+      const run = () => withAiWork(work, key, compute, progress, repairBudget);
+      return work ? work.step(key, run) : run();
+    };
     const beforeAi = () => work ? work.beforeAi() : this.beforeAi(actor);
     const validate = (key: string, value: Pick<GeneratedPackage, "problem" | "bundle">) => step(key, async () => {
+      if (work) await work.progress?.("validation"); else await progress("validation");
       const report = await this.validator.validate(value.problem, value.bundle);
       if (work && report.infrastructureError) throw new Error("O judge está indisponível. A validação será retomada automaticamente.");
       return report;
@@ -122,14 +132,16 @@ export class ProblemAuthoringModule implements ProblemAuthoring {
         if (!work) { await this.repository.saveJob(job); await this.saveConversationTurn(job, actor); }
         return;
       }
-      await beforeAi();
       if (input.mode === "search") {
         const sourceResults = await Promise.allSettled(this.licensedSources.map((source) => source.search(input.prompt, input.runtime)));
         const licensed = externalCandidates(sourceResults.flatMap((result) => result.status === "fulfilled" ? result.value : []), input.runtime, true);
         if (sourceResults.some((result) => result.status === "rejected")) job.error = "Uma fonte licenciada não respondeu. Exibindo as outras fontes disponíveis.";
         let external: SearchCandidate[] = [];
         try {
-          external = externalCandidates(await step("web-search", () => this.ai.searchWeb(input.prompt, input.runtime, actor, discoveryContext(known), context)), input.runtime);
+          if (this.ai.searchAvailable !== false && deduplicateCandidates([...known, ...licensed]).length < 3) {
+            await beforeAi();
+            external = externalCandidates(await step("web-search", () => this.ai.searchWeb(input.prompt, input.runtime, actor, discoveryContext(known), context)), input.runtime);
+          }
         } catch (error) {
           if (!known.length && !licensed.length) throw error;
           job.error = "A busca na web não respondeu. Exibindo questões e fontes já disponíveis.";
@@ -143,9 +155,11 @@ export class ProblemAuthoringModule implements ProblemAuthoring {
         const rankedIds = new Set(ranked.map((candidate) => candidate.id));
         job.result = { kind: "search", candidates: [...ranked, ...merged.filter((candidate) => !rankedIds.has(candidate.id))].slice(0, 7) };
       } else {
+        await beforeAi();
         let generated = await step("generated", () => this.ai.create(input, actor, discoveryContext(known), context));
         let validation = await validate("generation-validation", generated);
         if (!validation.valid && this.ai.repair) {
+          if (work) await work.progress?.("repair"); else await progress("repair");
           generated = await step("repaired", () => this.ai.repair!(input, actor, generated, validation));
           validation = await validate("repair-validation", generated);
         }
@@ -208,7 +222,10 @@ export class ProblemAuthoringModule implements ProblemAuthoring {
   async importLicensed(sourceName: string, slug: string, rawRuntime: Runtime, actor: Actor, work?: JobWork) {
     if (this.disabledReason) throw new Error(this.disabledReason);
     if (this.queue && !work) throw new Error("Use um pedido de importação assíncrono; a importação será executada pelo worker.");
-    const step = <T>(key: string, compute: () => Promise<T>) => work ? work.step(key, compute) : compute();
+    const step = <T>(key: string, compute: () => Promise<T>) => {
+      const run = () => withAiWork(work, key, compute);
+      return work ? work.step(key, run) : run();
+    };
     const runtime = RuntimeSchema.parse(rawRuntime);
     if (sourceName.toLowerCase() !== "exercism" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error("Fonte ou exercício inválido.");
     const sourceUrl = `https://github.com/exercism/${runtime}/tree/main/exercises/practice/${slug}`;

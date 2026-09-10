@@ -5,7 +5,7 @@ import { discoverySafetyInstructions, formatDiscoveryContext } from "./discovery
 import { WebSearchResultSchema, webSearchInstructions, webSearchJsonSchema } from "./search-result.js";
 import { formatConversationContext, type ConversationContext } from "./conversation.js";
 
-const generatedSchema = {
+export const generatedSchema = {
   type: "object",
   additionalProperties: false,
   required: ["title", "summary", "tags", "statementMd", "starterCode", "referenceSolution", "visibleCases", "hiddenCases"],
@@ -21,7 +21,7 @@ const generatedSchema = {
   }
 } as const;
 
-const progressiveGeneratedSchema = {
+export const progressiveGeneratedSchema = {
   type: "object",
   additionalProperties: false,
   required: ["title", "summary", "tags", "symbol", "stages", "starterCode", "referenceSolution", "visibleCases", "hiddenCases"],
@@ -66,6 +66,7 @@ type Generated = {
 };
 
 type ProgressiveGenerated = {
+  authoringContract?: JudgeBundle["authoringContract"];
   title: string;
   summary: string;
   tags: string[];
@@ -249,6 +250,7 @@ export class OpenAiAuthoringAdapter implements AiAuthoringAdapter {
         problemVersion: 1,
         visibleCases: mapCases(generated.visibleCases, "visible"),
         hiddenCases: mapCases(generated.hiddenCases, "hidden"),
+        ...(generated.authoringContract ? { authoringContract: generated.authoringContract } : {}),
         referenceSolutions: { [input.runtime]: generated.referenceSolution }
       }
     };

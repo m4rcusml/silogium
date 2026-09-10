@@ -54,7 +54,7 @@ infra/modal           endpoint e Sandbox do judge remoto
 questions/tests       simulador legado, mantido temporariamente
 ```
 
-O frontend não conhece detalhes de OpenAI, Exercism, licenciamento ou testes privados. Ele chama a interface pequena de autoria; adapters e repositórios ficam atrás desse limite.
+O frontend não conhece detalhes de Groq, Exercism, licenciamento ou testes privados. Ele chama a interface pequena de autoria; adapters e repositórios ficam atrás desse limite.
 
 ## Desenvolvimento local
 
@@ -90,46 +90,51 @@ Com a aplicação aberta em `localhost:3000`, `node scripts/qa-frontend.mjs` cap
 
 `node scripts/check-select-layout.mjs` verifica se as opções dos menus suspensos cabem nos campos em cinco larguras de tela. A interface usa Manrope variável servida localmente; a licença está em `apps/web/public/fonts/manrope-license.txt`.
 
-## IA local com Codex
+## IA com Groq
 
-Instale o Codex CLI, entre com a conta ChatGPT que possui acesso ao Codex e confirme a sessão:
+A integração ativa usa somente **Groq / `openai/gpt-oss-120b`**. Não usa a
+assinatura ChatGPT, OpenAI API ou fallback pago. Os adapters legados permanecem
+no histórico/código, mas não são selecionáveis pela configuração da aplicação.
 
-```powershell
-codex login
-codex login status
-```
-
-Configure `apps/web/.env.local`:
+Configure `apps/web/.env.local` (ignorado pelo Git):
 
 ```text
-SILOGIUM_AI_PROVIDER=codex
-CODEX_AUTHORING_MODEL=gpt-5.6-terra
-CODEX_DISCOVERY_MODEL=gpt-5.6-luna
-CODEX_TIMEOUT_MS=600000
+SILOGIUM_AI_PROVIDER=groq
+GROQ_API_KEY=<sua-chave-groq>
+GROQ_AUTHORING_MODEL=openai/gpt-oss-120b
+GROQ_WEB_SEARCH_ENABLED=false
 ```
 
-O modo **Criar** roda sem pesquisa web, em sandbox somente leitura, e exige uma resposta que obedeça ao JSON Schema da questão. O modo **Pesquisar** habilita web search e mantém resultados sem licença como links externos. A geração acontece em segundo plano, então a requisição web não fica aberta até o modelo terminar.
+`local` continua disponível como simulador determinístico para desenvolvimento
+e CI. Sem configuração/chave, a demo usa esse simulador; uma configuração Groq
+incompleta falha explicitamente, sem mudar de provedor.
 
-Para verificar autenticação, schema, solução e testes sem abrir o navegador:
+A criação não pesquisa a web. Divide contrato, código e fixtures em etapas;
+os exemplos são derivados dos testes visíveis, e o starter é um template
+incompleto. O judge verifica referência, starter e mutantes. Uma correção de
+formato JSON e uma correção após o judge são limitadas por pedido durável.
+Uma referência passar nos próprios testes **não prova correção independente**.
+
+A pesquisa prioriza catálogo e Exercism. Com menos de três sugestões, pode
+consultar a web quando `GROQ_WEB_SEARCH_ENABLED=true` (experimental). Só URLs
+presentes nos resultados reais da ferramenta são aceitas; sem licença confirmada,
+continuam links externos. Criar/refinar não usa essa ferramenta.
+
+Limites Free são compartilhados e sujeitos a mudança. Não fazemos upgrade de
+plano nem configuramos cobrança. A fila preserva etapas e aguarda capacidade;
+sem serviços de produção validados, mantenha `SILOGIUM_AUTHORING_ENABLED=false`.
+Veja [operação, limites e validação do Groq](docs/groq-integration.md).
+
+Teste real opt-in (consome a cota Groq, não executa o código gerado):
 
 ```powershell
-npm run test:codex
+node --env-file=apps/web/.env.local --import tsx scripts/evaluate-groq.ts --generate=classic-ts
 ```
 
-Esse uso consome os limites ou créditos incluídos na conta ChatGPT autenticada. Ele é apropriado para desenvolvimento local e ferramentas internas; não exponha a sessão pessoal do Codex em uma implantação pública.
-
-## OpenAI
-
-Para uma implantação compartilhada, defina `SILOGIUM_AI_PROVIDER=openai`. Somente o servidor lê `OPENAI_API_KEY`. O modo **Criar** usa Structured Outputs e não recebe ferramenta de busca; o modo **Pesquisar** usa web search e sempre devolve URLs de origem. Configure:
-
-```text
-SILOGIUM_AI_PROVIDER=openai
-OPENAI_API_KEY=...
-OPENAI_DISCOVERY_MODEL=gpt-5.6-luna
-OPENAI_AUTHORING_MODEL=gpt-5.6-terra
-```
-
-O validador verifica schema, identidade do bundle, cobertura dos níveis, presença de testes privados e solução de referência. Quando um judge está disponível, também executa a referência, compila o starter e confirma que os testes rejeitam a implementação defeituosa.
+O arquivo gerado fica em `.silogium/groq-evaluations/`, fora do Git. **Revise o
+código antes** de executá-lo no judge local com
+`npm run test:groq -- --trusted-validate=<arquivo.private.json>`. Esse runner
+local não é uma sandbox de segurança; produção exige Modal.
 
 ## Supabase
 
@@ -246,7 +251,7 @@ Importações mantêm a licença da fonte e separam autores, contribuidores, URL
 
 ## Deploy no Vercel
 
-Importe o repositório na Vercel, mantenha a raiz do projeto no repositório e use o `vercel.json` incluído. Cadastre todas as variáveis de Supabase, OpenAI e Modal. Em produção, execução local fica desabilitada; sem `MODAL_JUDGE_ENDPOINT`, o sistema retorna `system_error` sem consumir cota.
+Importe o repositório na Vercel, mantenha a raiz do projeto no repositório e use o `vercel.json` incluído. Configure Supabase e Modal na web; a chave Groq pertence somente ao worker. Em produção, execução local fica desabilitada; sem `MODAL_JUDGE_ENDPOINT`, o sistema retorna `system_error` sem consumir cota.
 
 Antes do deploy:
 

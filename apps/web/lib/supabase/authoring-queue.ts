@@ -26,7 +26,8 @@ export class SupabaseAuthoringQueue implements AuthoringQueue {
   heartbeat(lease: JobLease, leaseSeconds: number) { return this.call<boolean>("heartbeat", { jobId: lease.job.id, token: lease.token, leaseSeconds }); }
   checkpoint(lease: JobLease, key: string, value: unknown) { return this.call<boolean>("checkpoint", { jobId: lease.job.id, token: lease.token, key, value }); }
   reserveAi(lease: JobLease) { return this.call<boolean>("reserve_ai", { jobId: lease.job.id, token: lease.token }); }
-  retry(lease: JobLease, error: string, permanent: boolean) { return this.call<boolean>("retry", { jobId: lease.job.id, token: lease.token, error, permanent }); }
+  retry(lease: JobLease, error: string, permanent: boolean, options?: { deferMs?: number; refund?: boolean }) { return this.call<boolean>("retry", { jobId: lease.job.id, token: lease.token, error, permanent, ...options }); }
+  progress(lease: JobLease, phase: import("@silogium/authoring").AiPhase) { return this.call<boolean>("progress", { jobId: lease.job.id, token: lease.token, phase }); }
 
   finish(lease: JobLease, raw: JobOutcome) {
     const outcome = structuredClone(raw);

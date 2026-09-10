@@ -12,7 +12,7 @@ export class MemoryAuthoringQueue implements AuthoringQueue {
   private tasks = new Map<string, Task>();
   private reservations = new Map<string, Promise<boolean>>();
   constructor(private readonly repository: MemoryAuthoringRepository, private readonly conversations: MemoryConversationRepository,
-    private readonly options: { now?: () => number; reserveAi?: (actor: Actor) => Promise<boolean> } = {}) {}
+    private readonly options: { now?: () => number; reserveAi?: (actor: Actor) => Promise<boolean>; refundAi?: (actor: Actor, jobId: string) => Promise<void> } = {}) {}
   private now() { return this.options.now?.() ?? Date.now(); }
   private active(lease: JobLease) {
     const task = this.tasks.get(lease.job.id);
@@ -102,13 +102,26 @@ export class MemoryAuthoringQueue implements AuthoringQueue {
       return true;
     } catch (error) { task.state = "leased"; throw error; }
   }
-  async retry(lease: JobLease, error: string, permanent: boolean) {
+  async progress(lease: JobLease, phase: import("./ai-work.js").AiPhase) {
     const task = this.active(lease); if (!task) return false;
-    const terminal = permanent || task.attempt >= 3;
+    task.job.progress = { phase, updatedAt: new Date(this.now()).toISOString() };
+    await this.repository.saveJob(task.job); return true;
+  }
+  async retry(lease: JobLease, error: string, permanent: boolean, options?: { deferMs?: number; refund?: boolean }) {
+    const task = this.active(lease); if (!task) return false;
+    const expired = this.now() - task.admittedAt >= 86_400_000;
+    const deferred = options?.deferMs && !permanent && !expired ? options.deferMs : 0;
+    const terminal = permanent || expired || !deferred && task.attempt >= 3;
+    if (terminal && options?.refund && task.aiReserved) {
+      await this.options.refundAi?.(task.actor, task.job.id);
+      task.aiReserved = false;
+    }
+    if (deferred) task.attempt = Math.max(0, task.attempt - 1);
     task.state = terminal ? "failed" : "queued";
-    task.availableAt = this.now() + (task.attempt === 1 ? 10_000 : 30_000);
+    task.availableAt = this.now() + (deferred || (task.attempt === 1 ? 10_000 : 30_000));
     if (terminal) task.checkpoints = {};
     task.job = { ...task.job, status: terminal ? "failed" : "running", error: terminal ? error.slice(0, 2_000) : "O processamento será retomado automaticamente.",
+      ...(!terminal ? { progress: { phase: "waiting" as const, updatedAt: new Date(this.now()).toISOString(), retryAt: new Date(task.availableAt).toISOString() } } : {}),
       completedAt: terminal ? new Date(this.now()).toISOString() : undefined };
     await this.repository.saveJob(task.job);
     return true;

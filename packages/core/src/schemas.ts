@@ -145,13 +145,24 @@ const StdioCaseSchema = z.object({
 export const JudgeCaseSchema = z.discriminatedUnion("kind", [CallSequenceCaseSchema, StdioCaseSchema]);
 export type JudgeCase = z.infer<typeof JudgeCaseSchema>;
 
+export const AuthoringContractSchema = z.object({
+  symbol: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+  constructorParameters: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/)),
+  methods: z.array(z.object({
+    name: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+    stage: z.number().int().min(1).max(4),
+    parameters: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/))
+  })).min(1)
+});
+
 export const JudgeBundleSchema = z.object({
   schemaVersion: z.literal(1),
   problemId: z.string().uuid(),
   problemVersion: z.number().int().positive(),
   visibleCases: z.array(JudgeCaseSchema),
   hiddenCases: z.array(JudgeCaseSchema),
-  referenceSolutions: z.partialRecord(RuntimeSchema, z.string())
+  referenceSolutions: z.partialRecord(RuntimeSchema, z.string()),
+  authoringContract: AuthoringContractSchema.optional()
 });
 export type JudgeBundle = z.infer<typeof JudgeBundleSchema>;
 

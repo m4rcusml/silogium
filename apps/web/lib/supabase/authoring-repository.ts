@@ -58,6 +58,7 @@ function jobFromRow(data: Record<string, unknown>): AuthoringJob {
     status: data.status,
     request: data.request,
     createdAt: data.created_at,
+    progress: data.progress ?? undefined,
     completedAt: data.completed_at ?? undefined,
     result: data.result ?? undefined,
     error: data.error ?? undefined
@@ -196,6 +197,7 @@ export class SupabaseAuthoringRepository implements AuthoringRepository {
       mode: job.request.mode,
       status: job.status,
       request: job.request,
+      progress: job.progress ?? null,
       result: publicJob(job),
       error: job.error ?? null,
       created_at: job.createdAt,

@@ -3,6 +3,8 @@ import type { Actor, ContentRequest } from "@silogium/core";
 import { AuthoringWorker, ExercismAdapter, LocalAiAdapter, MemoryAuthoringQueue, MemoryAuthoringRepository, MemoryConversationRepository,
   PermanentAuthoringError, ProblemAuthoringModule, ProblemEditorial, type AiAuthoringAdapter, type AuthoringJob, type GeneratedPackage, type JobLease, type JobOutcome, type ValidationReport } from "../src/index.js";
 import { mockSnapshot } from "./fixtures/exercism-source.js";
+import { AiProviderError } from "../src/groq-transport.js";
+import { aiStep } from "../src/ai-work.js";
 
 const actor: Actor = { id: "31000000-0000-4000-8000-000000000001", handle: "owner", role: "user" };
 const other: Actor = { id: "31000000-0000-4000-8000-000000000002", handle: "other", role: "user" };
@@ -39,6 +41,35 @@ const outcome = (lease: JobLease): JobOutcome => ({ job: { ...lease.job, status:
 afterEach(() => vi.restoreAllMocks());
 
 describe("autoria durável pelo mesmo módulo", () => {
+  it("retoma a fase privada após 429 sem gastar tentativas nem cobrar outra operação", async () => {
+    const s = setup(); const definition = vi.fn(async () => ({ rules: "private" })); let calls = 0;
+    s.ai.create.mockImplementation(async () => {
+      await aiStep("definition", "same-request", definition);
+      await aiStep("code", "same-request", async () => {
+        if (++calls <= 4) throw new AiProviderError("rate_limit", true, 65000);
+        return { code: "private" };
+      });
+      return fixture();
+    });
+    const requested = await s.module.request(input, actor);
+    for (let n = 0; n < 4; n++) {
+      expect(await s.worker().runOnce()).toBe("retry");
+      expect((await s.module.getJob(requested.jobId, actor))?.progress?.phase).toBe("waiting");
+      expect(await s.worker().runOnce()).toBe("idle"); s.advance(65001);
+    }
+    expect(await s.worker().runOnce()).toBe("completed");
+    expect(definition).toHaveBeenCalledOnce(); expect(s.reserve).toHaveBeenCalledOnce();
+    expect(JSON.stringify(await s.module.getJob(requested.jobId, other))).not.toContain("private");
+  });
+
+  it("falha de configuração não é repetida pelo worker", async () => {
+    const s = setup(); s.ai.create.mockRejectedValue(new AiProviderError("configuration"));
+    const requested = await s.module.request(input, actor);
+    expect(await s.worker().runOnce()).toBe("retry"); s.advance(90000);
+    expect(await s.worker().runOnce()).toBe("idle");
+    expect((await s.module.getJob(requested.jobId, actor))?.status).toBe("failed");
+    expect(s.ai.create).toHaveBeenCalledOnce();
+  });
   it("retorna sem IA e só processa quando um worker reivindica o job", async () => {
     const s = setup();
     const requested = await s.module.request(input, actor);

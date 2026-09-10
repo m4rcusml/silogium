@@ -25,8 +25,9 @@ export function deploymentReadiness(environment: NodeJS.ProcessEnv, target: "web
   check("authoring-flag", [undefined, "", "true", "false"].includes(environment.SILOGIUM_AUTHORING_ENABLED), "SILOGIUM_AUTHORING_ENABLED aceita somente true ou false; ausente significa desabilitada em produção.");
   if (target === "worker") {
     check("worker-enabled", environment.SILOGIUM_AUTHORING_ENABLED === "true", "O worker requer SILOGIUM_AUTHORING_ENABLED=true após a escolha e configuração do provedor.");
-    check("ai-provider", environment.SILOGIUM_AI_PROVIDER === "openai" && Boolean(environment.OPENAI_API_KEY?.trim()),
-      "No adapter remoto atual, configure o provedor openai e sua chave no worker; outro provedor precisa de adapter antes de habilitar.");
+    check("ai-provider", environment.SILOGIUM_AI_PROVIDER === "groq" && Boolean(environment.GROQ_API_KEY?.trim())
+      && (!environment.GROQ_AUTHORING_MODEL || environment.GROQ_AUTHORING_MODEL === "openai/gpt-oss-120b"),
+      "Configure groq, GROQ_API_KEY e openai/gpt-oss-120b no worker. Não há fallback para outro provedor.");
   }
   if (environment.SILOGIUM_AUTHORING_ENABLED === "true") checks.push({ id: "worker-live", status: "manual", message: "Comprovar worker ativo, recuperação após interrupção e migração de fila aplicada. A flag não comprova isso." });
   else checks.push({ id: "ai-disabled", status: "ok", message: "Studio sem novas operações de IA; catálogo, resolução e histórico não dependem de uma chave de IA." });

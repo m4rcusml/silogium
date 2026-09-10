@@ -12,6 +12,10 @@ export * from "./openai.js";
 export * from "./local-ai.js";
 export * from "./codex.js";
 export * from "./providers.js";
+export * from "./groq.js";
+export * from "./groq-transport.js";
+export * from "./groq-capacity.js";
+export type { AiPhase } from "./ai-work.js";
 
 import { ExercismAdapter } from "./exercism.js";
 import { ProblemAuthoringModule } from "./module.js";

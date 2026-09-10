@@ -45,20 +45,21 @@ describe("configuração de IA", () => {
     expect(resolveAiProviderConfiguration({})).toEqual({ provider: "local", model: undefined });
   });
 
-  it("seleciona o Codex com modelos adequados para autoria local", () => {
+  it("seleciona exclusivamente Groq quando configurado", () => {
     const environment = {
-      SILOGIUM_AI_PROVIDER: "codex",
-      CODEX_AUTHORING_MODEL: "gpt-5.6-terra",
-      CODEX_DISCOVERY_MODEL: "gpt-5.6-luna"
+      SILOGIUM_AI_PROVIDER: "groq", GROQ_API_KEY: "test-key", OPENAI_API_KEY: "must-not-use"
     };
-    expect(createAiAuthoringAdapterFromEnv(environment)).toBeInstanceOf(CodexAuthoringAdapter);
-    expect(resolveAiProviderConfiguration(environment)).toEqual({ provider: "codex", model: "gpt-5.6-terra" });
+    expect(createAiAuthoringAdapterFromEnv(environment).constructor.name).toBe("GroqAuthoringAdapter");
+    expect(resolveAiProviderConfiguration(environment)).toEqual({ provider: "groq", model: "openai/gpt-oss-120b" });
+    expect(resolveAiProviderConfiguration({ OPENAI_API_KEY: "must-not-use" }).provider).toBe("local");
   });
 
-  it("rejeita provedores, timeouts e configuração OpenAI inválidos", () => {
+  it("rejeita provedores antigos, outro modelo e chave ausente", () => {
     expect(() => createAiAuthoringAdapterFromEnv({ SILOGIUM_AI_PROVIDER: "desconhecido" })).toThrow(/inválido/i);
-    expect(() => createAiAuthoringAdapterFromEnv({ SILOGIUM_AI_PROVIDER: "codex", CODEX_TIMEOUT_MS: "zero" })).toThrow(/número positivo/i);
-    expect(() => createAiAuthoringAdapterFromEnv({ SILOGIUM_AI_PROVIDER: "openai" })).toThrow(/OPENAI_API_KEY/);
+    expect(() => createAiAuthoringAdapterFromEnv({ SILOGIUM_AI_PROVIDER: "codex" })).toThrow(/inválido/i);
+    expect(() => createAiAuthoringAdapterFromEnv({ SILOGIUM_AI_PROVIDER: "openai" })).toThrow(/inválido/i);
+    expect(() => createAiAuthoringAdapterFromEnv({ SILOGIUM_AI_PROVIDER: "groq" })).toThrow(/GROQ_API_KEY/);
+    expect(() => createAiAuthoringAdapterFromEnv({ SILOGIUM_AI_PROVIDER: "groq", GROQ_API_KEY: "test", GROQ_AUTHORING_MODEL: "another" })).toThrow(/120b/);
   });
 });
 

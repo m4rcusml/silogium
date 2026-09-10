@@ -19,7 +19,7 @@ describe("diagnóstico de preparação offline", () => {
   it("worker exige ativação explícita e configuração própria", () => {
     expect(deploymentReadiness(configured, "worker").filter((item) => item.status === "error").map((item) => item.id))
       .toEqual(["worker-enabled", "ai-provider"]);
-    const result = deploymentReadiness({ ...configured, SILOGIUM_AUTHORING_ENABLED: "true", SILOGIUM_AI_PROVIDER: "openai", OPENAI_API_KEY: "secret-api-example" }, "worker");
+    const result = deploymentReadiness({ ...configured, SILOGIUM_AUTHORING_ENABLED: "true", SILOGIUM_AI_PROVIDER: "groq", GROQ_API_KEY: "secret-api-example" }, "worker");
     expect(result.some((item) => item.status === "error")).toBe(false);
     expect(result.find((item) => item.id === "worker-live")?.status).toBe("manual");
   });

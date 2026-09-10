@@ -2,7 +2,7 @@
 
 ## Estado e arquitetura
 
-Implementado, **não provisionado nem validado contra Supabase/Modal reais**. Aplicar a migração `202609090010_authoring_worker.sql` e executar os testes de banco antes de habilitar.
+Implementado, **não provisionado nem validado contra Supabase/Modal reais**. Aplicar as migrações até `202609100012_groq_capacity.sql` e executar os testes de banco antes de habilitar. A configuração ativa é [Groq](./groq-integration.md).
 
 Em produção/preview, a web grava o pedido e a tarefa em uma transação e retorna `202`; não inicia IA em uma promise descartada. O worker reivindica a tarefa no PostgreSQL com `FOR UPDATE SKIP LOCKED`, lease de 120 segundos, heartbeat a cada 40 segundos e no máximo três tentativas. Retries aguardam 10 e 30 segundos. O status público continua `running` enquanto aguarda execução; a fila privada distingue espera e processamento.
 
@@ -19,8 +19,8 @@ A admissão limita cada usuário a três tarefas em fila/processamento e dez ped
 - Web: trio Supabase completo e `SILOGIUM_AUTHORING_ENABLED=true` somente depois de validar o worker. Ausente/false em hospedagem desabilita novos pedidos **antes de criar conversa/job ou consumir cota**; catálogo e resolução continuam funcionando.
 - Worker: trio Supabase, `SILOGIUM_AUTHORING_ENABLED=true`, provedor IA configurado via `SILOGIUM_AI_PROVIDER` e suas variáveis, `MODAL_JUDGE_ENDPOINT` e `MODAL_JUDGE_TOKEN`.
 - `SILOGIUM_WORKER_ID` é opcional, somente diagnóstico de lease. Nunca contém segredo.
-- A fila não depende de OpenAI: recebe um `AiAuthoringAdapter`. Os adapters atuais são OpenAI remoto, Codex pessoal local e simulador local. Os dois últimos são recusados pelo worker hospedado. Um futuro provedor remoto gratuito só exige outro adapter; nenhuma mudança de fila.
-- Segredos no ambiente do servidor ou Modal Secret `silogium-authoring-worker`, nunca em arquivos versionados. `OPENAI_*` só é necessário se esse for o provedor escolhido. A web não instancia nem precisa da chave do provedor.
+- A fila recebe um `AiAuthoringAdapter`. Somente Groq é habilitado como IA real. O simulador local é recusado pelo worker hospedado; OpenAI e Codex são adapters legados inativos.
+- Segredos no ambiente do servidor ou Modal Secret `silogium-authoring-worker`, nunca em arquivos versionados. Configure `GROQ_API_KEY`, `SILOGIUM_AI_PROVIDER=groq` e `GROQ_AUTHORING_MODEL=openai/gpt-oss-120b`. A web não instancia nem precisa da chave do provedor.
 
 ## Execução pelo operador (não executada nesta implementação)
 
@@ -33,7 +33,7 @@ node --import tsx infra/worker/run.ts --poll
 modal deploy -m infra.worker.app
 ```
 
-`--check` valida configuração local, **não** conexão, migrações, saúde ou credenciais reais. Por padrão o processo assume produção; `--development` é opt-in somente para testes locais com Supabase. O modo integrado `npm run dev` sem Supabase/worker mantém Codex/simulador e execução local existentes.
+`--check` valida configuração local, **não** conexão, migrações, saúde ou credenciais reais. Por padrão o processo assume produção; `--development` é opt-in somente para testes locais com Supabase. O modo integrado `npm run dev` sem Supabase/worker usa Groq/simulador e execução local de código confiável.
 
 Para testar a fila inteira em desenvolvimento com banco, configure `SILOGIUM_AUTHORING_MODE=worker` e `SILOGIUM_AUTHORING_ENABLED=true` na web; execute o worker separado com `--development --poll`. Sem esse opt-in, a experiência local continua integrada. Não use `--development` em servidor público.
 

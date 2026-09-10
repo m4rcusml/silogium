@@ -59,6 +59,23 @@ test("modos têm descrições claras e nomes acessíveis, e o guia começa recol
   expect(activity.importRequests).toEqual([]);
 });
 
+test("mostra a fase real e espera de capacidade sem reenviar o pedido", async ({ page }) => {
+  const activity = await mockStudio(page);
+  let waiting = false;
+  await page.route("**/api/v1/jobs/studio-orientation-job", route => route.fulfill({ json: {
+    status: "running", progress: { phase: waiting ? "waiting" : "cases", updatedAt: new Date().toISOString(),
+      ...(waiting ? { retryAt: new Date(Date.now() + 65000).toISOString() } : {}) }
+  } }));
+  await page.goto("/studio?mode=create");
+  await page.getByRole("textbox", { name: promptLabel }).fill("Uma questão curta sobre mapas e contagem");
+  await page.getByRole("button", { name: "Criar e validar", exact: true }).click();
+  await expect(page.locator(".authoring-progress")).toContainText("Construindo testes e exemplos");
+  waiting = true;
+  await expect(page.locator(".authoring-progress")).toContainText("Aguardando capacidade do Groq");
+  await expect(page.locator(".authoring-progress")).toContainText("Não é necessário reenviar");
+  expect(activity.requests).toHaveLength(1);
+});
+
 for (const example of [
   { mode: "search", name: "Arrays e mapas", value: "Quero praticar arrays e mapas em uma questão fácil, com contagem de frequências.", action: "Encontrar questões" },
   { mode: "create", name: "Agenda de reuniões", value: "Crie uma questão sobre conflitos em uma agenda de reuniões, com intervalos e casos de borda.", action: "Criar e validar" }
@@ -207,7 +224,7 @@ test("Começar outro assunto remove só o contexto e preserva o pedido em ediç�
   await expect(history.locator("summary")).toContainText("Conversas anteriores (1)");
   await history.locator("summary").click();
   await history.getByRole("button", { name: /Treino anterior de intervalos/ }).click();
-  await expect(page.locator(".studio-context")).toContainText("Continuando uma conversa.");
+  await expect(page.locator(".studio-context")).toContainText("A pesquisa externa usa somente o pedido atual e a linguagem");
   await page.getByRole("button", { name: "Começar outro assunto", exact: true }).click();
   await expect(page.locator(".studio-context")).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: promptLabel })).toHaveValue("Quero praticar ordenação de intervalos sem usar o contexto anterior.");

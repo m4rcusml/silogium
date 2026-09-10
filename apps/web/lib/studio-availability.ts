@@ -7,7 +7,8 @@ export function studioAvailability(environment: NodeJS.ProcessEnv = process.env)
     const available = environment.SILOGIUM_AUTHORING_ENABLED === "true";
     return { available, providerLabel: available ? "Processamento em segundo plano" : "IA ainda não habilitada neste ambiente" };
   }
-  const ai = resolveAiProviderConfiguration(environment);
-  return { available: true, providerLabel: ai.provider === "codex" ? `Codex local · ${ai.model}`
-    : ai.provider === "openai" ? `OpenAI · ${ai.model}` : "Simulador local" };
+  try {
+    const ai = resolveAiProviderConfiguration(environment);
+    return { available: true, providerLabel: ai.provider === "groq" ? `Groq · ${ai.model}` : "Simulador local" };
+  } catch { return { available: false, providerLabel: "IA indisponível · confira a configuração do Groq" }; }
 }

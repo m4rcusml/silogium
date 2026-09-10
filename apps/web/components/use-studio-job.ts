@@ -8,6 +8,7 @@ import { readStudioResponse, studioError } from "./studio-request";
 export type Candidate = { id: string; kind: "catalog" | "licensed_import" | "external_link"; title: string; summary: string; url: string; sourceName: string; licenseSpdx?: string; importable: boolean; runtime: "typescript" | "python"; metadata?: DiscoveryMetadata; matchReasons?: string[]; similarity?: number; retrievedAt?: string; format?: "classic" | "progressive"; difficulty?: "easy" | "medium" | "hard" };
 export type CreatedProblem = { problem: ProblemDefinition; accessKey?: string; validation: ValidationReport };
 export type JobResult = {
+  progress?: { phase: import("@silogium/authoring").AiPhase; updatedAt: string; retryAt?: string };
   status: "running" | "completed" | "failed" | "needs_clarification" | "needs_confirmation";
   error?: string;
   request?: AuthoringRequest;

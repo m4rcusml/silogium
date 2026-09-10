@@ -32,6 +32,16 @@ export class StructuralProblemValidator implements ProblemValidator {
       passed: cases.every((item) => stages.has(item.stage))
     });
     checks.push({ name: "modelo de execução das fixtures", passed: cases.every((test) => test.kind === problem.executionModel) });
+    if (bundle.authoringContract) {
+      const contract = bundle.authoringContract;
+      checks.push({ name: "contrato progressivo", passed: problem.executionModel === "call-sequence"
+        && new Set(contract.methods.map(m => m.name)).size === contract.methods.length
+        && contract.methods.every(m => stages.has(m.stage))
+        && [contract.constructorParameters, ...contract.methods.map(m => m.parameters)].every(p => new Set(p).size === p.length)
+        && problem.runtimes.every(r => r.entrypoint.kind === "class" && r.entrypoint.symbol === contract.symbol)
+        && cases.every(test => test.kind === "call-sequence" && test.constructorArgs.length === contract.constructorParameters.length
+          && test.calls.every(call => contract.methods.some(m => m.name === call.method && m.stage <= test.stage && m.parameters.length === call.args.length))) });
+    }
     checks.push({ name: "respostas determinísticas consistentes", passed: problem.runtimes.every((runtime) => fixturesAreConsistent(cases, runtime.language)), message: "A mesma entrada ou prefixo de chamadas não pode exigir respostas diferentes." });
     for (const stage of problem.stages) {
       const cases = [...bundle.visibleCases, ...bundle.hiddenCases].filter((item) => item.stage === stage.number);

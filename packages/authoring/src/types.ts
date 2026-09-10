@@ -73,6 +73,7 @@ export type GeneratedPackage = {
 };
 
 export type AuthoringJob = {
+  progress?: { phase: import("./ai-work.js").AiPhase; updatedAt: string; retryAt?: string };
   id: string;
   actorId: string;
   status: "running" | "completed" | "failed" | "needs_clarification" | "needs_confirmation";
@@ -94,6 +95,7 @@ export interface ProblemAuthoring {
 }
 
 export interface AiAuthoringAdapter {
+  readonly searchAvailable?: boolean;
   create(input: Extract<ContentRequest, { mode: "create" }>, actor: Actor, context?: DiscoveryContext, conversation?: ConversationContext): Promise<{ problem: ProblemDefinition; bundle: JudgeBundle }>;
   refine?(input: { prompt: string; problem: ProblemDefinition; bundle: JudgeBundle }, actor: Actor, conversation?: ConversationContext): Promise<{ problem: ProblemDefinition; bundle: JudgeBundle }>;
   repair?(

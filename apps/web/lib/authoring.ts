@@ -5,6 +5,7 @@ import { createJudgeFromEnv } from "@silogium/judge";
 import { consumeQuota } from "./usage";
 import { getConversationRepository } from "./conversations";
 import { SupabaseAuthoringQueue } from "./supabase/authoring-queue";
+import { SupabaseGroqCapacity } from "./supabase/groq-capacity";
 import { assertProductionServerConfig, isHostedProduction } from "./production-config";
 
 const deferredAi: AiAuthoringAdapter = {
@@ -33,7 +34,8 @@ export function getAuthoringModule(): ProblemAuthoringModule {
   if (durable && !createSupabaseAdminClient()) throw new Error("O processamento durável exige Supabase.");
   const mode = durable ? `durable:${process.env.SILOGIUM_AUTHORING_ENABLED === "true"}` : "local";
   if (globalModules.__silogiumAuthoringMode === mode && globalModules.__silogiumAuthoringModule instanceof ProblemAuthoringModule) return globalModules.__silogiumAuthoringModule;
-  const ai = durable ? deferredAi : createAiAuthoringAdapterFromEnv(process.env);
+  const ai = durable ? deferredAi : createAiAuthoringAdapterFromEnv(process.env,
+    createSupabaseAdminClient() ? { capacity: new SupabaseGroqCapacity() } : {});
   globalModules.__silogiumAuthoringMode = mode;
   return globalModules.__silogiumAuthoringModule = new ProblemAuthoringModule(
     getAuthoringRepository(),
@@ -57,11 +59,12 @@ export function getAuthoringWorker(): AuthoringWorker {
   assertProductionServerConfig();
   if (!createSupabaseAdminClient()) throw new Error("O worker durável exige Supabase; o modo local integrado continua disponível sem worker.");
   if (process.env.SILOGIUM_AUTHORING_ENABLED !== "true") throw new Error("O processamento de autoria não está habilitado.");
+  if (isHostedProduction() && process.env.SILOGIUM_AI_PROVIDER !== "groq") throw new Error("Configure o provedor remoto groq no worker.");
   const configuration = resolveAiProviderConfiguration(process.env);
   if (isHostedProduction() && ["local", "codex"].includes(configuration.provider)) throw new Error("Configure um provedor remoto no worker. Codex pessoal e simulador local não são executados em produção.");
   if (isHostedProduction() && (!process.env.MODAL_JUDGE_ENDPOINT || !process.env.MODAL_JUDGE_TOKEN)) throw new Error("Configure o judge remoto antes de processar autoria em produção.");
   const queue = new SupabaseAuthoringQueue();
-  const module = new ProblemAuthoringModule(getAuthoringRepository(), createAiAuthoringAdapterFromEnv(process.env), [new ExercismAdapter()],
+  const module = new ProblemAuthoringModule(getAuthoringRepository(), createAiAuthoringAdapterFromEnv(process.env, { capacity: new SupabaseGroqCapacity() }), [new ExercismAdapter()],
     new StructuralProblemValidator(createJudgeFromEnv()), false, undefined, getConversationRepository());
   return new AuthoringWorker(queue, (lease, work) => module.processQueuedJob(lease, work), { workerId: process.env.SILOGIUM_WORKER_ID });
 }

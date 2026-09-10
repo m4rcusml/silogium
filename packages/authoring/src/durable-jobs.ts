@@ -2,6 +2,7 @@ import type { Actor } from "@silogium/core";
 import type { Conversation, ConversationTurn } from "./conversation.js";
 import type { EditorialRecord } from "./editorial-types.js";
 import type { AuthoringJob, GeneratedPackage, SearchCandidate } from "./types.js";
+import { AiProviderError } from "./groq-transport.js";
 
 /** Server-only. Checkpoints may contain references, source snapshots and hidden tests. */
 export type JobLease = {
@@ -24,12 +25,14 @@ export interface AuthoringQueue {
   checkpoint(lease: JobLease, key: string, value: unknown): Promise<boolean>;
   reserveAi(lease: JobLease): Promise<boolean>;
   finish(lease: JobLease, outcome: JobOutcome): Promise<boolean>;
-  retry(lease: JobLease, error: string, permanent: boolean): Promise<boolean>;
+  retry(lease: JobLease, error: string, permanent: boolean, options?: { deferMs?: number; refund?: boolean }): Promise<boolean>;
+  progress?(lease: JobLease, phase: import("./ai-work.js").AiPhase): Promise<boolean>;
 }
 
 export class JobLeaseLost extends Error { constructor() { super("O processamento foi retomado por outro worker."); } }
 export class PermanentAuthoringError extends Error {}
 function safeFailure(error: unknown): string {
+  if (error instanceof AiProviderError) return error.message;
   const message = error instanceof Error ? error.message : "";
   if (error instanceof PermanentAuthoringError && message.startsWith("Sua cota diária")) return "Sua cota diária de IA terminou. Tente novamente amanhã.";
   if (/rascunho mudou|editorial revision conflict/i.test(message)) return "O rascunho mudou durante o processamento. Reabra a versão atual antes de pedir outro refinamento.";
@@ -37,6 +40,7 @@ function safeFailure(error: unknown): string {
   return "Não foi possível concluir o processamento. Confira suas questões e tente novamente; se persistir, procure o administrador.";
 }
 export type JobWork = {
+  progress?(phase: import("./ai-work.js").AiPhase): Promise<void>;
   effects: JobEffects;
   step<T>(key: string, compute: () => Promise<T>): Promise<T>;
   beforeAi(): Promise<void>;
@@ -66,6 +70,10 @@ export class AuthoringWorker {
     timer.unref?.();
     const work: JobWork = {
       effects: {},
+      progress: async (phase) => {
+        assertLease();
+        if (this.queue.progress && !await this.queue.progress(lease, phase)) throw new JobLeaseLost();
+      },
       step: async <T>(key: string, compute: () => Promise<T>): Promise<T> => {
         assertLease();
         if (Object.hasOwn(lease.checkpoints, key)) return structuredClone(lease.checkpoints[key]) as T;
@@ -87,7 +95,12 @@ export class AuthoringWorker {
     } catch (error) {
       if (lost || error instanceof JobLeaseLost) return "lease_lost";
       // A lost response after COMMIT is harmless: retry's old token cannot change the terminal job.
-      return await this.queue.retry(lease, safeFailure(error), error instanceof PermanentAuthoringError) ? "retry" : "lease_lost";
+      const provider = error instanceof AiProviderError;
+      const permanent = error instanceof PermanentAuthoringError || provider && !error.retryable;
+      return await this.queue.retry(lease, safeFailure(error), permanent, {
+        ...(provider && error.code === "rate_limit" ? { deferMs: Math.min(86_400_000, Math.max(1000, error.retryAfterMs)) } : {}),
+        refund: provider && error.code !== "invalid_output" && error.code !== "input_too_large" || !provider && !(error instanceof PermanentAuthoringError)
+      }) ? "retry" : "lease_lost";
     } finally { clearInterval(timer); }
   }
 }

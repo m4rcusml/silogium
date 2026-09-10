@@ -1,7 +1,8 @@
 # Silogium — preparação e deploy
 
 Atualizado em 10/09/2026. **Preparado localmente, ainda não publicado.** Contas,
-credenciais e escolha do provedor de IA serão fornecidas pelo proprietário depois.
+credenciais de produção serão fornecidas pelo proprietário depois. Groq foi escolhido;
+a integração e os limites estão descritos em [Groq](./groq-integration.md).
 Este guia substitui a proposta antiga: Ollama, OpenRouter, Gemini e judge Docker
 local não são integrações implementadas neste repositório.
 
@@ -11,14 +12,14 @@ local não são integrações implementadas neste repositório.
 | --- | --- | --- |
 | Web | Next.js na porta 3000 | Vercel, workspace apps/web |
 | Persistência/Auth | Demo em memória ou Supabase explícito | Supabase obrigatório + GitHub OAuth |
-| Autoria | Codex pessoal ou simulador, preservados | Worker durável separado; provedor ainda a escolher |
+| Autoria | Groq ou simulador determinístico | Worker durável separado, Groq 120b |
 | Judge | Subprocesso local, somente código confiável | Controlador Modal v2 + sandbox nova por caso |
 | Fila | Integrada por padrão; worker opcional com banco | Tabela transacional privada no Supabase |
 | Progresso oficial | Demo não concede marcos oficiais | Evidência persistida + bundles privados + política auditada |
 
 Nenhuma assinatura pessoal Codex/ChatGPT é colocada no backend público.
-A fila é independente do provedor de IA. Um novo provedor gratuito exige um
-adapter; não é habilitado apenas por trocar o nome de uma variável.
+A fila é independente do provedor de IA. Somente Groq é habilitado como provedor
+real; não há troca automática para outro serviço/modelo. Aplicar também a migração 012.
 
 ## O que já foi preparado
 
