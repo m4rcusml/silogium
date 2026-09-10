@@ -196,6 +196,6 @@ export class LocalAiAdapter implements AiAuthoringAdapter {
   }
 
   async importLicensed(_source: LicensedExerciseSource): Promise<{ problem: ProblemDefinition; bundle: JudgeBundle }> {
-    throw new Error("A importação licenciada exige OPENAI_API_KEY para converter starter e testes ao formato do Silogium.");
+    throw new Error("O simulador determinístico não converte fontes externas. Configure o Codex autenticado ou um provedor OpenAI compatível para importar o snapshot licenciado.");
   }
 }

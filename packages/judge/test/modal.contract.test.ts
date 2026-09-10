@@ -5,6 +5,26 @@ import { seedProblems } from "@silogium/core";
 import { ModalJudgeAdapter } from "../src/modal.js";
 
 describe("contrato do judge remoto", () => {
+  it("não envia referências ao sandbox e sanitiza detalhes ocultos do serviço remoto", async () => {
+    const problem = seedProblems[0]!;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({
+      id: "result", verdict: "wrong_answer", score: 0, maxScore: 150, durationMs: 3,
+      cases: [{ id: "private", name: "entrada 371", stage: 1, passed: false, message: "segredo", mismatch: { expected: 371, actual: 0 } }]
+    }), { status: 200 }));
+    try {
+      const result = await new ModalJudgeAdapter("https://judge.invalid").evaluate(problem, {
+        schemaVersion: 1, problemId: problem.id, problemVersion: problem.version,
+        visibleCases: [], hiddenCases: [{ kind: "stdio", id: "private", name: "entrada 371", stage: 1, stdin: "371", expectedStdout: "371" }],
+        referenceSolutions: { typescript: "solução privada" }
+      }, { kind: "submission", problemId: problem.id, problemVersion: problem.version, runtime: "typescript", source: "console.log(0)" });
+      const payload = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+      expect(payload.bundle.referenceSolutions).toEqual({});
+      expect(result.cases[0]).toEqual({ id: "private", name: "Teste oculto", stage: 1, passed: false });
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   it("fixa runtimes, memória, timeout e bloqueio de rede no Sandbox", async () => {
     const source = await readFile(resolve(process.cwd(), "infra/modal/app.py"), "utf8");
     expect(source).toContain('node:22.22.0-bookworm-slim');

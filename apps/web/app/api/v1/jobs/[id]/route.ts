@@ -10,7 +10,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const safeJob = job.result?.kind === "create"
       ? { ...job, result: { kind: "create", package: { problem: job.result.package.problem, validation: job.result.package.validation, accessKey: job.result.package.accessKey } } }
       : job;
-    return Response.json(safeJob);
+    return Response.json(safeJob, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Não autorizado." }, { status: 401 });
   }

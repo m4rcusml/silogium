@@ -1,0 +1,31 @@
+.strip { display: flex; align-items: center; gap: 14px; padding: 16px 20px; margin-bottom: 24px; background: #14171c; border: 1px solid #262b33; border-radius: 8px; min-width: 0; }
+.strip > svg { flex: none; color: #b89be9; }
+.strip > div { display: grid; gap: 5px; min-width: 0; flex: 1; }
+.strip strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.strip span { color: #9ca3af; font-size: 11px; line-height: 1.6; }
+.strip > a { color: #cbb5fb; font-size: 12px; white-space: nowrap; }
+.note { padding: 14px 16px; border: 1px solid #35313d; border-radius: 7px; color: #bcb4c9; font-size: 12px; line-height: 1.7; }
+.goal { display: grid; gap: 12px; padding: 18px; border: 1px solid #262b33; border-radius: 8px; }
+.goal strong { font-size: 14px; }
+.goal progress { width: 100%; height: 8px; accent-color: #8b5cf6; }
+.achievements { display: grid; gap: 14px; }
+.achievements h3 { display: flex; align-items: center; gap: 8px; }
+.achievements ul { list-style: none; display: grid; gap: 12px; padding: 0; }
+.achievements li { display: flex; align-items: flex-start; gap: 12px; border: 1px solid #262b33; border-radius: 8px; padding: 16px; }
+.achievements li > svg { flex: none; color: #9abea6; margin-top: 3px; }
+.achievements li > div { display: grid; gap: 6px; }
+.achievements strong { font-size: 13px; }
+.achievements p, .achievements time { color: #9ca3af; font-size: 12px; line-height: 1.6; }
+.form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding-top: 22px; border-top: 1px solid #262b33; }
+.form label { display: grid; gap: 9px; font-size: 12px; min-width: 0; }
+.form input, .form select { width: 100%; min-width: 0; }
+.form .check { display: flex; align-items: center; gap: 10px; }
+.form .check input { width: 16px; height: 16px; flex: none; accent-color: #8b5cf6; }
+.form > p, .form > .check { grid-column: 1 / -1; }
+.form > button { justify-self: start; grid-column: 1 / -1; }
+.weeks { border-top: 1px solid #262b33; padding-top: 18px; font-size: 12px; }
+.weeks summary { cursor: pointer; padding-block: 6px; }
+.weeks ul { padding: 14px 0 0; list-style: none; display: grid; gap: 14px; }
+.weeks li { display: grid; gap: 5px; }
+.weeks li span:last-child { color: #9ca3af; }
+@media(max-width: 600px) { .strip { align-items: flex-start; flex-wrap: wrap; padding: 16px; gap: 12px; }.strip > a { margin-left: 28px; }.form { grid-template-columns: minmax(0, 1fr); }.note { padding: 12px; } }

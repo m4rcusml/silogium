@@ -6,6 +6,7 @@
   "exports": "./src/index.ts",
   "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit" },
   "dependencies": {
+    "@openai/codex-sdk": "^0.153.4",
     "@silogium/core": "0.2.0",
     "openai": "^5.20.0",
     "zod": "^4.1.0"

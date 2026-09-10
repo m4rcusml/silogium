@@ -6,16 +6,20 @@ import { LocalJudgeAdapter } from "@silogium/judge";
 const root = resolve(import.meta.dirname, "..");
 const privateDirectory = resolve(process.env.SILOGIUM_PRIVATE_BUNDLES_DIR ?? resolve(root, "..", "silogium-private-bundles"));
 const problems = ProblemDefinitionSchema.array().parse(JSON.parse(readFileSync(resolve(root, "content/problems/generated-catalog.json"), "utf8")));
+const publicClassics = new Set<string>(JSON.parse(readFileSync(resolve(root, "content/problems/classic-registry.json"), "utf8")).map((item: { id: string }) => item.id));
 const judge = new LocalJudgeAdapter();
 
 for (const problem of problems) {
   const visible = JSON.parse(readFileSync(resolve(root, `content/judge/${problem.slug}.visible.json`), "utf8"));
-  const privateBundle = JSON.parse(readFileSync(resolve(privateDirectory, `${problem.slug}.private.json`), "utf8"));
+  // Only the explicitly registered classics have no private fixtures. The existing
+  // progressive seeds still require their external private bundle and references.
+  const publicOnly = publicClassics.has(problem.id);
+  const privateBundle = publicOnly ? { hiddenCases: [] } : JSON.parse(readFileSync(resolve(privateDirectory, `${problem.slug}.private.json`), "utf8"));
   const references: Record<string, string> = {};
   for (const [runtime, extension] of [["typescript", "ts"], ["python", "py"]] as const) {
     const privatePath = resolve(privateDirectory, `${problem.slug}.reference.${extension}`);
-    const fallback = runtime === "typescript" && problem.slug === "rede-de-armarios" ? resolve(root, "reference-solutions/typescript/question1.ts") : privatePath;
-    if (existsSync(privatePath)) references[runtime] = readFileSync(privatePath, "utf8");
+    const fallback = publicOnly ? resolve(root, `reference-solutions/${runtime}/${problem.slug}.${extension}`) : runtime === "typescript" && problem.slug === "rede-de-armarios" ? resolve(root, "reference-solutions/typescript/question1.ts") : privatePath;
+    if (!publicOnly && existsSync(privatePath)) references[runtime] = readFileSync(privatePath, "utf8");
     else if (existsSync(fallback)) references[runtime] = readFileSync(fallback, "utf8");
   }
   const bundle = JudgeBundleSchema.parse({ ...visible, hiddenCases: privateBundle.hiddenCases, referenceSolutions: references });

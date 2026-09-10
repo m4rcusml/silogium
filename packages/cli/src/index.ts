@@ -4,7 +4,7 @@ import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { JudgeBundleSchema, ProblemDefinitionSchema, type ExecutionResult, type Runtime } from "@silogium/core";
+import { JudgeBundleSchema, ProblemDefinitionSchema, renderProblemAttribution, type ExecutionResult, type Runtime } from "@silogium/core";
 import { LocalJudgeAdapter } from "@silogium/judge";
 
 type Config = { token?: string; apiUrl: string };
@@ -69,7 +69,8 @@ async function pull(slug?: string, runtimeInput?: string, targetInput?: string, 
   const extension = runtime === "typescript" ? "ts" : "py";
   const solutionPath = join(target, `solution.${extension}`);
   if (!existsSync(solutionPath)) await writeFile(solutionPath, definition.starterCode, "utf8");
-  await writeFile(join(target, "README.md"), problem.stages.map((stage) => stage.statementMd).join("\n\n---\n\n"), "utf8");
+  const attribution = renderProblemAttribution(problem);
+  await writeFile(join(target, "README.md"), problem.stages.map((stage) => stage.statementMd).join("\n\n---\n\n") + "\n\n## Fonte e licenças\n\n" + attribution.split("\n").map((line) => `    ${line}`).join("\n"), "utf8");
   await writeFile(join(target, ".silogium", "problem.json"), JSON.stringify(problem, null, 2), "utf8");
   await writeFile(join(target, ".silogium", "visible.json"), JSON.stringify({ schemaVersion: 1, problemId: problem.id, problemVersion: problem.version, visibleCases: payload.visibleCases, hiddenCases: [], referenceSolutions: {} }, null, 2), "utf8");
   await writeFile(join(target, ".silogium", "workspace.json"), JSON.stringify({ runtime, solution: basename(solutionPath) }, null, 2), "utf8");

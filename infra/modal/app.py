@@ -85,7 +85,7 @@ if problem["executionModel"] == "stdio":
             print(json.dumps(failure(verdict, message)))
             raise SystemExit
         passed = output.rstrip().replace("\r\n", "\n") == case["expectedStdout"].rstrip().replace("\r\n", "\n")
-        outcomes.append({"id": case["id"], "name": case["name"], "stage": case["stage"], "passed": passed, **({} if passed else {"message": "Saída incorreta."})})
+        outcomes.append({"id": case["id"], "name": case["name"], "stage": case["stage"], "passed": passed, **({} if passed else {"message": "Saída incorreta.", "mismatch": {"expected": case["expectedStdout"], "actual": output, "input": case["stdin"]}})})
 else:
     wrapper = "/work/call_runner.mjs" if request["runtime"] == "typescript" else "/work/call_runner.py"
     command = ["node", wrapper] if request["runtime"] == "typescript" else ["python", wrapper]
@@ -105,6 +105,7 @@ if request["kind"] == "submission":
         if outcome["id"] in hidden_ids:
             outcome["name"] = "Teste oculto"
             outcome.pop("message", None)
+            outcome.pop("mismatch", None)
 
 score = 0
 max_score = 0
@@ -134,17 +135,35 @@ const imported = await import(pathToFileURL("/work/solution.mjs").href + "?v=" +
 const Constructor = imported[runtime.entrypoint.symbol];
 if (typeof Constructor !== "function") throw new Error("Símbolo exportado não encontrado: " + runtime.entrypoint.symbol);
 const outcomes = [];
+const jsonValue = (value) => { try { return JSON.parse(JSON.stringify(value) ?? '"[undefined]"'); } catch { return String(value); } };
 for (const test of cases) {
+  let mismatch;
   try {
     const instance = new Constructor(...test.constructorArgs);
     for (const call of test.calls) {
       const methodName = runtime.entrypoint.methodMap[call.method] || call.method;
+      const input = jsonValue(call.args);
       const actual = await instance[methodName](...call.args);
-      if (JSON.stringify(actual) !== JSON.stringify(call.expected)) throw new Error("Resultado incorreto em " + methodName);
+      if (JSON.stringify(actual) !== JSON.stringify(call.expected)) {
+        mismatch = { expected: jsonValue(call.expected), actual: jsonValue(actual), method: call.method, input };
+        throw new Error("Resultado incorreto em " + methodName);
+      }
     }
     outcomes.push({ id: test.id, name: test.name, stage: test.stage, passed: true });
   } catch (error) {
-    outcomes.push({ id: test.id, name: test.name, stage: test.stage, passed: false, message: error instanceof Error ? error.message : String(error) });
+    outcomes.push({ id: test.id, name: test.name, stage: test.stage, passed: false, message: error instanceof Error ? error.message : String(error), ...(mismatch ? { mismatch } : {}) });
+  }
+}
+let remaining = Math.max(0, payload.problem.limits.outputBytes - Buffer.byteLength(JSON.stringify(outcomes.map(({ mismatch, ...outcome }) => outcome))) - 1);
+for (const outcome of outcomes) {
+  const mismatch = outcome.mismatch;
+  delete outcome.mismatch;
+  if (!mismatch) continue;
+  if (mismatch.input !== undefined && Buffer.byteLength(JSON.stringify(mismatch.input)) > 2048) delete mismatch.input;
+  const addedBytes = Buffer.byteLength(JSON.stringify({ ...outcome, mismatch })) - Buffer.byteLength(JSON.stringify(outcome));
+  if (addedBytes <= 4096 && addedBytes <= remaining) {
+    outcome.mismatch = mismatch;
+    remaining -= addedBytes;
   }
 }
 console.log(JSON.stringify(outcomes));
@@ -162,19 +181,39 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 constructor = getattr(module, runtime["entrypoint"]["symbol"])
 outcomes = []
+def json_value(value):
+    try:
+        return json.loads(json.dumps(value, allow_nan=False))
+    except (TypeError, ValueError):
+        return repr(value)
 for test in cases:
+    mismatch = None
     try:
         instance = constructor(*test.get("constructorArgs", []))
         for call in test["calls"]:
             name = runtime["entrypoint"].get("methodMap", {}).get(call["method"], call["method"])
+            call_input = json_value(call["args"])
             actual = getattr(instance, name)(*call["args"])
             if inspect.isawaitable(actual):
                 raise RuntimeError("Métodos assíncronos não são suportados")
             if actual != call["expected"]:
+                mismatch = {"expected": json_value(call["expected"]), "actual": json_value(actual), "method": call["method"], "input": call_input}
                 raise AssertionError(f"Resultado incorreto em {name}")
         outcomes.append({"id": test["id"], "name": test["name"], "stage": test["stage"], "passed": True})
     except Exception as error:
-        outcomes.append({"id": test["id"], "name": test["name"], "stage": test["stage"], "passed": False, "message": str(error)})
+        outcomes.append({"id": test["id"], "name": test["name"], "stage": test["stage"], "passed": False, "message": str(error), **({"mismatch": mismatch} if mismatch is not None else {})})
+legacy = [{key: value for key, value in outcome.items() if key != "mismatch"} for outcome in outcomes]
+remaining = max(0, int(payload["problem"]["limits"]["outputBytes"]) - len(json.dumps(legacy, ensure_ascii=False).encode("utf-8")) - 1)
+for outcome in outcomes:
+    mismatch = outcome.pop("mismatch", None)
+    if mismatch is None:
+        continue
+    if "input" in mismatch and len(json.dumps(mismatch["input"], ensure_ascii=False).encode("utf-8")) > 2048:
+        del mismatch["input"]
+    added_bytes = len(json.dumps({**outcome, "mismatch": mismatch}, ensure_ascii=False).encode("utf-8")) - len(json.dumps(outcome, ensure_ascii=False).encode("utf-8"))
+    if added_bytes <= 4096 and added_bytes <= remaining:
+        outcome["mismatch"] = mismatch
+        remaining -= added_bytes
 print(json.dumps(outcomes, ensure_ascii=False))
 '''
 

@@ -21,6 +21,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:db": "npx supabase test db",
+    "test:codex": "tsx scripts/smoke-codex.ts",
     "typecheck": "npm run content:generate && npm run typecheck --workspaces --if-present",
     "cli": "tsx packages/cli/src/index.ts",
     "test:q1:ts": "tsx grader/typescript/run.ts q1 visible",

@@ -274,5 +274,319 @@
     },
     "createdAt": "2026-09-08T12:00:00.000Z",
     "updatedAt": "2026-09-08T12:00:00.000Z"
+  },
+  {
+    "schemaVersion": 1,
+    "id": "07005dd3-cc37-4e5b-8aaa-3555c9b14a91",
+    "version": 1,
+    "slug": "pacotes-complementares",
+    "title": "Pacotes complementares",
+    "summary": "Encontre dois pacotes cuja soma atinge o alvo e respeite a ordem de chegada nos desempates.",
+    "locale": "pt-BR",
+    "origin": "native",
+    "visibility": "public",
+    "status": "published",
+    "format": "classic",
+    "executionModel": "stdio",
+    "difficulty": "easy",
+    "tags": [
+      "arrays",
+      "hash map",
+      "busca",
+      "desempate",
+      "logística"
+    ],
+    "metadata": {
+      "schemaVersion": 1,
+      "concepts": [
+        "array",
+        "hash-map"
+      ],
+      "skills": [
+        "parsing",
+        "optimization",
+        "desempate-deterministico"
+      ],
+      "topics": [
+        "logistics"
+      ],
+      "keywords": [
+        "pares",
+        "soma",
+        "complemento",
+        "indices",
+        "duplicados",
+        "alvo"
+      ],
+      "runtimes": [
+        "typescript",
+        "python"
+      ],
+      "format": "classic",
+      "difficulty": "easy",
+      "inferred": true
+    },
+    "stages": [
+      {
+        "number": 1,
+        "statementMd": "# Pacotes complementares\n\nUma central de logística recebe `n` pacotes em uma ordem fixa. O pacote na posição `i` tem volume inteiro `v[i]`. Você deve escolher **dois pacotes diferentes** cuja soma dos volumes seja exatamente o alvo `t`.\n\nEntre todos os pares válidos `(i, j)`, com `i < j`, escolha:\n\n1. O par com o **menor segundo índice `j`**.\n2. Se ainda houver empate, o par com o **menor primeiro índice `i`**.\n\nOs índices começam em **1** e se referem à ordem original. Volumes repetidos representam pacotes diferentes; um mesmo pacote nunca pode ocupar as duas posições. Se não existir um par válido, imprima `-1`.\n\n## Entrada\n\nA primeira linha contém dois inteiros `n` e `t`. A segunda contém os `n` volumes, separados por espaços. Para `n = 0`, não há volumes nem é necessária uma segunda linha.\n\n- `0 ≤ n ≤ 100000`\n- `0 ≤ t ≤ 2000000000`\n- `0 ≤ v[i] ≤ 1000000000`\n- A entrada sempre respeita essas restrições; quebras de linha e espaços adicionais não mudam os valores.\n\n## Saída\n\nUma única linha com `i j`, separados por um espaço, ou `-1` quando não existir solução. Não imprima rótulos ou explicações.\n\n## Exemplo 1\n\nEntrada:\n\n```text\n6 10\n1 4 4 6 9 6\n```\n\nSaída:\n\n```text\n2 4\n```\n\nOs pares `(2, 4)` e `(3, 4)` atingem o alvo antes de `(1, 5)`, pois têm o segundo índice menor. Entre eles, o índice inicial `2` vence. O desempate **não** prioriza o menor `i` antes de comparar `j`.\n\n## Exemplo 2\n\nEntrada:\n\n```text\n3 8\n4 1 2\n```\n\nSaída:\n\n```text\n-1\n```\n\nO único pacote de volume `4` não pode ser escolhido duas vezes. Com menos de dois pacotes, a resposta também é `-1`.\n\n## Implementação\n\nLeia a entrada padrão e escreva na saída padrão. O starter oferece `solve`, mas o contrato avaliado é o programa completo. Todos os cálculos cabem em um inteiro exato de `number` no TypeScript e em `int` no Python.\n",
+        "points": 100
+      }
+    ],
+    "runtimes": [
+      {
+        "language": "typescript",
+        "version": "22.22.0",
+        "starterCode": "import { readFileSync } from \"node:fs\";\n\nexport function solve(input: string): string {\n  // Leia n, o alvo e os volumes. Retorne os índices escolhidos ou \"-1\".\n  // Respeite a ordem original e os dois critérios de desempate do enunciado.\n  void input;\n  return \"-1\";\n}\n\nconsole.log(solve(readFileSync(0, \"utf8\")));\n",
+        "entrypoint": {
+          "kind": "stdio"
+        }
+      },
+      {
+        "language": "python",
+        "version": "3.13.11",
+        "starterCode": "import sys\n\n\ndef solve(data: str) -> str:\n    # Leia n, o alvo e os volumes. Respeite os dois desempates.\n    return \"-1\"\n\n\nif __name__ == \"__main__\":\n    print(solve(sys.stdin.read()))\n",
+        "entrypoint": {
+          "kind": "stdio"
+        }
+      }
+    ],
+    "examples": [
+      {
+        "input": "6 10\n1 4 4 6 9 6\n",
+        "output": "2 4\n",
+        "explanation": "O segundo índice 4 vence 5; entre os pacotes de volume 4, o índice 2 vem primeiro."
+      },
+      {
+        "input": "3 8\n4 1 2\n",
+        "output": "-1\n",
+        "explanation": "Um pacote não pode ser usado duas vezes; existe apenas um pacote de volume 4."
+      }
+    ],
+    "limits": {
+      "timeMs": 2000,
+      "memoryMiB": 256,
+      "outputBytes": 65536
+    },
+    "provenance": {
+      "kind": "native",
+      "createdBy": "system",
+      "createdByHandle": "silogium",
+      "assistedByAi": true,
+      "statementLicense": "CC-BY-4.0",
+      "codeLicense": "MIT"
+    },
+    "createdAt": "2026-09-10T12:00:00.000Z",
+    "updatedAt": "2026-09-10T12:00:00.000Z"
+  },
+  {
+    "schemaVersion": 1,
+    "id": "aa7bd0b8-18ac-4a82-a8e4-e117d53cf008",
+    "version": 1,
+    "slug": "janelas-de-manutencao",
+    "title": "Janelas de manutenção",
+    "summary": "Una intervalos de indisponibilidade e calcule a duração total e a maior janela contínua de manutenção.",
+    "locale": "pt-BR",
+    "origin": "native",
+    "visibility": "public",
+    "status": "published",
+    "format": "classic",
+    "executionModel": "stdio",
+    "difficulty": "medium",
+    "tags": [
+      "intervalos",
+      "ordenação",
+      "agregação",
+      "sobreposição"
+    ],
+    "metadata": {
+      "schemaVersion": 1,
+      "concepts": [
+        "interval",
+        "sorting",
+        "array"
+      ],
+      "skills": [
+        "aggregation",
+        "parsing",
+        "optimization"
+      ],
+      "topics": [
+        "manutencao-de-servicos"
+      ],
+      "keywords": [
+        "uniao",
+        "intervalos",
+        "contiguos",
+        "duracao",
+        "sobreposicao",
+        "indisponibilidade"
+      ],
+      "runtimes": [
+        "typescript",
+        "python"
+      ],
+      "format": "classic",
+      "difficulty": "medium",
+      "inferred": true
+    },
+    "stages": [
+      {
+        "number": 1,
+        "statementMd": "# Janelas de manutenção\n\nUm serviço ficará indisponível durante `n` intervalos de manutenção. Os intervalos podem chegar fora de ordem, se sobrepor, estar contidos em outros ou se repetir.\n\nCada intervalo é representado por `[inicio, fim)`: inclui o instante inicial e exclui o final. Sua duração é `fim - inicio`; estamos medindo tempo contínuo, **não contando pontos inteiros**.\n\nConsidere a união dos intervalos. Duas janelas que se sobrepõem **ou se encostam** formam uma única janela contínua. Por exemplo, `[0, 2)` e `[2, 5)` formam `[0, 5)`, sem intervalo de funcionamento entre elas.\n\nCalcule:\n\n1. A duração total da indisponibilidade, sem contar sobreposições mais de uma vez.\n2. A duração da maior janela contínua resultante.\n\n## Entrada\n\nA primeira linha contém `n`. Cada uma das `n` linhas seguintes contém dois inteiros `inicio` e `fim`.\n\n- `0 ≤ n ≤ 100000`\n- `0 ≤ inicio < fim ≤ 1000000000`\n- Intervalos repetidos são permitidos.\n- Os horários usam a mesma unidade e origem; não há datas, fusos ou conversões.\n- A entrada é válida; os valores podem ser separados por qualquer espaço em branco.\n\n## Saída\n\nUma única linha com `total maior`, separados por um espaço. Para `n = 0`, imprima `0 0`. Não imprima as janelas individuais.\n\n## Exemplo 1\n\nEntrada:\n\n```text\n4\n5 8\n0 2\n2 5\n12 14\n```\n\nSaída:\n\n```text\n10 8\n```\n\nAs três primeiras manutenções formam `[0, 8)`. A outra forma `[12, 14)`. O total é `8 + 2 = 10` e a maior janela dura `8`.\n\n## Exemplo 2\n\nEntrada:\n\n```text\n4\n2 9\n4 5\n2 9\n3 7\n```\n\nSaída:\n\n```text\n7 7\n```\n\nTodos os intervalos estão dentro de `[2, 9)`, inclusive sua repetição. Nenhum acrescenta tempo fora dessa janela.\n\n## Implementação\n\nLeia da entrada padrão e escreva na saída padrão. O starter oferece `solve`, mas o programa completo é avaliado. A duração total e a maior duração não ultrapassam `1000000000`; `number` no TypeScript e `int` no Python são suficientes.\n",
+        "points": 100
+      }
+    ],
+    "runtimes": [
+      {
+        "language": "typescript",
+        "version": "22.22.0",
+        "starterCode": "import { readFileSync } from \"node:fs\";\n\nexport function solve(input: string): string {\n  // Leia os intervalos e retorne \"total maior\" após considerar sua união.\n  void input;\n  return \"0 0\";\n}\n\nconsole.log(solve(readFileSync(0, \"utf8\")));\n",
+        "entrypoint": {
+          "kind": "stdio"
+        }
+      },
+      {
+        "language": "python",
+        "version": "3.13.11",
+        "starterCode": "import sys\n\n\ndef solve(data: str) -> str:\n    # Leia os intervalos e retorne \"total maior\" após considerar sua união.\n    return \"0 0\"\n\n\nif __name__ == \"__main__\":\n    print(solve(sys.stdin.read()))\n",
+        "entrypoint": {
+          "kind": "stdio"
+        }
+      }
+    ],
+    "examples": [
+      {
+        "input": "4\n5 8\n0 2\n2 5\n12 14\n",
+        "output": "10 8\n",
+        "explanation": "As janelas finais são [0,8) e [12,14): duração total 8+2 e maior duração 8."
+      },
+      {
+        "input": "4\n2 9\n4 5\n2 9\n3 7\n",
+        "output": "7 7\n",
+        "explanation": "Intervalos contidos e repetidos não somam tempo extra à janela [2,9)."
+      }
+    ],
+    "limits": {
+      "timeMs": 2000,
+      "memoryMiB": 256,
+      "outputBytes": 65536
+    },
+    "provenance": {
+      "kind": "native",
+      "createdBy": "system",
+      "createdByHandle": "silogium",
+      "assistedByAi": true,
+      "statementLicense": "CC-BY-4.0",
+      "codeLicense": "MIT"
+    },
+    "createdAt": "2026-09-10T12:00:00.000Z",
+    "updatedAt": "2026-09-10T12:00:00.000Z"
+  },
+  {
+    "schemaVersion": 1,
+    "id": "f8b25022-8755-4d5a-958c-75e5dbc702ed",
+    "version": 1,
+    "slug": "rotas-da-estacao",
+    "title": "Rotas da estação",
+    "summary": "Calcule a menor quantidade de trechos entre estações e quantas rotas distintas atingem essa distância.",
+    "locale": "pt-BR",
+    "origin": "native",
+    "visibility": "public",
+    "status": "published",
+    "format": "classic",
+    "executionModel": "stdio",
+    "difficulty": "medium",
+    "tags": [
+      "grafos",
+      "busca em largura",
+      "caminhos mínimos",
+      "contagem",
+      "aritmética modular"
+    ],
+    "metadata": {
+      "schemaVersion": 1,
+      "concepts": [
+        "graph",
+        "bfs",
+        "queue"
+      ],
+      "skills": [
+        "aggregation",
+        "parsing",
+        "optimization"
+      ],
+      "topics": [
+        "rotas-de-transporte"
+      ],
+      "keywords": [
+        "caminhos",
+        "minimos",
+        "distancia",
+        "contagem",
+        "modulo",
+        "nao-dirigido",
+        "estacoes"
+      ],
+      "runtimes": [
+        "typescript",
+        "python"
+      ],
+      "format": "classic",
+      "difficulty": "medium",
+      "inferred": true
+    },
+    "stages": [
+      {
+        "number": 1,
+        "statementMd": "# Rotas da estação\n\nUma rede de transporte possui `n` estações, numeradas de **1 a `n`**, e `m` ligações. Cada ligação pode ser percorrida nos **dois sentidos** e custa exatamente um trecho, independentemente das estações envolvidas.\n\nDados uma origem `s` e um destino `t`, encontre a menor quantidade de trechos necessária para ir de `s` a `t` e conte quantas rotas distintas usam exatamente essa quantidade.\n\nDuas rotas são distintas quando suas sequências de estações diferem. Conte apenas rotas de comprimento mínimo, não passeios com desvios ou voltas. Como a quantidade pode ser grande, imprima seu resto na divisão por **1000000007**.\n\n## Entrada\n\nA primeira linha contém `n m s t`. Cada uma das `m` linhas seguintes contém `u v`, indicando uma ligação não dirigida entre as estações `u` e `v`.\n\n- `1 ≤ n ≤ 100000`\n- `0 ≤ m ≤ 200000`\n- `1 ≤ s, t, u, v ≤ n`\n- `u ≠ v`; não há ligações repetidas, nem mesmo com a ordem invertida.\n- O grafo pode ser desconectado. A origem e o destino podem ser iguais.\n- A entrada respeita todas as restrições; os valores podem ser separados por qualquer espaço em branco.\n\n## Saída\n\nUma linha com `distancia quantidade`, separadas por um espaço.\n\n- Se o destino não for alcançável, imprima `-1 0`.\n- Se `s = t`, a rota vazia é a única rota mínima: imprima `0 1`.\n- Caso contrário, imprima a distância mínima e a quantidade de rotas mínimas módulo `1000000007`.\n\nUma contagem modular igual a zero **não** significa, por si só, que o destino seja inalcançável; a distância determina isso.\n\n## Exemplo 1\n\nEntrada:\n\n```text\n6 8 1 6\n1 2\n1 3\n2 4\n2 5\n3 4\n3 5\n4 6\n5 6\n```\n\nSaída:\n\n```text\n3 4\n```\n\nAs rotas mínimas são `1 → 2 → 4 → 6`, `1 → 2 → 5 → 6`, `1 → 3 → 4 → 6` e `1 → 3 → 5 → 6`. Todas têm três trechos.\n\n## Exemplo 2\n\nEntrada:\n\n```text\n4 1 1 4\n1 2\n```\n\nSaída:\n\n```text\n-1 0\n```\n\n## Implementação\n\nLeia da entrada padrão e escreva na saída padrão. O starter oferece `solve`, mas o programa completo é avaliado. Para TypeScript, mantenha as contagens reduzidas pelo módulo a cada soma; assim, `number` é suficiente sem perder precisão. No Python, a mesma redução evita inteiros desnecessariamente grandes.\n",
+        "points": 100
+      }
+    ],
+    "runtimes": [
+      {
+        "language": "typescript",
+        "version": "22.22.0",
+        "starterCode": "import { readFileSync } from \"node:fs\";\n\nexport function solve(input: string): string {\n  // Leia a rede e retorne \"distancia quantidade\", conforme o enunciado.\n  void input;\n  return \"-1 0\";\n}\n\nconsole.log(solve(readFileSync(0, \"utf8\")));\n",
+        "entrypoint": {
+          "kind": "stdio"
+        }
+      },
+      {
+        "language": "python",
+        "version": "3.13.11",
+        "starterCode": "import sys\n\n\ndef solve(data: str) -> str:\n    # Leia a rede e retorne \"distancia quantidade\", conforme o enunciado.\n    return \"-1 0\"\n\n\nif __name__ == \"__main__\":\n    print(solve(sys.stdin.read()))\n",
+        "entrypoint": {
+          "kind": "stdio"
+        }
+      }
+    ],
+    "examples": [
+      {
+        "input": "6 8 1 6\n1 2\n1 3\n2 4\n2 5\n3 4\n3 5\n4 6\n5 6\n",
+        "output": "3 4\n",
+        "explanation": "Há quatro rotas de três trechos: escolha 2 ou 3 e, depois, 4 ou 5."
+      },
+      {
+        "input": "4 1 1 4\n1 2\n",
+        "output": "-1 0\n",
+        "explanation": "Não existe ligação entre a origem 1 e o destino 4."
+      }
+    ],
+    "limits": {
+      "timeMs": 2000,
+      "memoryMiB": 256,
+      "outputBytes": 65536
+    },
+    "provenance": {
+      "kind": "native",
+      "createdBy": "system",
+      "createdByHandle": "silogium",
+      "assistedByAi": true,
+      "statementLicense": "CC-BY-4.0",
+      "codeLicense": "MIT"
+    },
+    "createdAt": "2026-09-10T12:00:00.000Z",
+    "updatedAt": "2026-09-10T12:00:00.000Z"
   }
 ]

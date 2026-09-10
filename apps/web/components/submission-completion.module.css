@@ -1,0 +1,75 @@
+.nextStep {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 12px;
+  padding: 16px;
+  border: 1px solid #315747;
+  border-radius: 10px;
+  background: var(--panel);
+}
+.successIcon { margin-top: 2px; color: var(--success); }
+.nextStep > div { flex: 1 1 190px; min-width: 0; }
+.nextStep strong { font-size: 13px; }
+.nextStep p { margin: 5px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.nextStep > button { min-height: 36px; margin-left: auto; white-space: normal; font-size: 12px; }
+/* Keep case details reachable even when the user has made the results pane short. */
+.nextStep ~ :global(.test-results) { min-height: 180px; }
+
+.dialog {
+  width: min(520px, calc(100% - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  color: var(--text);
+  background: var(--panel);
+  box-shadow: 0 24px 80px #0006;
+  overscroll-behavior: contain;
+}
+.dialog::backdrop { background: #000a; }
+.dialog[open] { animation: reveal 160ms ease-out; }
+.content { display: flex; flex-direction: column; gap: 24px; padding: 28px; }
+.heading { display: flex; align-items: center; gap: 12px; }
+.seal { flex: none; display: grid; place-items: center; width: 48px; height: 48px; color: var(--success); background: #182c25; border: 1px solid #315747; border-radius: 14px; }
+.label { font-size: 11px; font-weight: 700; letter-spacing: .075em; color: var(--success); }
+.heading .close { flex: none; width: 36px; min-height: 36px; margin-left: auto; padding: 8px; }
+.introduction h2 { margin: 0; font-size: clamp(24px, 5vw, 29px); line-height: 1.2; }
+.introduction p { margin: 10px 0 0; font-size: 14px; color: var(--muted); }
+.problem { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.problem strong { overflow-wrap: anywhere; font-size: 15px; }
+.problem > span { color: var(--muted); font-size: 12px; }
+.metrics { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 16px; margin: 0; padding-block: 20px; border-block: 1px solid var(--border); }
+.metrics > div { min-width: 0; }
+.metrics dt { margin-bottom: 6px; color: var(--muted); font-size: 11px; }
+.metrics dd { margin: 0; font-size: 23px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.4; overflow-wrap: anywhere; }
+.metrics dd > span { font-size: 13px; font-weight: 500; color: var(--muted); }
+.stages { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin: 0; padding: 0; list-style: none; }
+.stages li { min-width: 0; display: flex; align-items: center; gap: 7px; font-size: 12px; }
+.stages svg { color: var(--success); }
+.stages small { margin-left: auto; color: var(--muted); font-size: 11px; }
+.note { margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); background: var(--background); font-size: 12px; overflow-wrap: anywhere; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.actions > a, .actions > button { justify-content: center; min-height: 44px; white-space: normal; text-align: center; }
+.actions > a { flex: 1 1 235px; }
+.actions > button { flex: 1 1 120px; }
+.actions .edit { flex-basis: 100%; color: var(--muted); min-height: 36px; }
+@keyframes reveal { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (max-width: 400px) {
+  .content { gap: 20px; padding: 20px; }
+  .heading { gap: 10px; }
+  .seal { width: 40px; height: 40px; border-radius: 11px; }
+  .label { font-size: 10px; letter-spacing: .03em; }
+  .metrics { gap: 10px; }
+  .metrics dd { font-size: 20px; }
+  .metrics dd > span { font-size: 11px; }
+  .stages { gap: 10px; }
+  .stages li { flex-wrap: wrap; }
+  .stages small { width: 100%; margin-left: 21px; }
+}
+@media (prefers-reduced-motion: reduce) { .dialog[open] { animation: none; } }

@@ -1,4 +1,6 @@
-import { AssistantWorkbench } from "../../components/assistant-workbench";
+import { redirect } from "next/navigation";
 
 export const metadata = { title: "Assistente" };
-export default function AssistantPage() { return <AssistantWorkbench />; }
+export default function AssistantPage() {
+  redirect("/studio");
+}

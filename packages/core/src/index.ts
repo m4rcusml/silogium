@@ -1,5 +1,10 @@
 export * from "./schemas.js";
+export * from "./personal.js";
+export * from "./attribution.js";
 export * from "./catalog.js";
 export * from "./publication.js";
 export * from "./quota.js";
+export * from "./practice.js";
+export * from "./discovery.js";
+export * from "./practice-progress.js";
 export { seedProblems } from "./generated-catalog.js";

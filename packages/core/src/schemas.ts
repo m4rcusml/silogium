@@ -4,6 +4,20 @@ export const RuntimeSchema = z.enum(["typescript", "python"]);
 export type Runtime = z.infer<typeof RuntimeSchema>;
 export const ProblemFormatSchema = z.enum(["classic", "progressive"]);
 export type ProblemFormat = z.infer<typeof ProblemFormatSchema>;
+const DiscoveryTermSchema = z.string().trim().min(1).max(64);
+/** Search hints inferred from public descriptions, never a license or authorship authority. */
+export const DiscoveryMetadataSchema = z.object({
+  schemaVersion: z.literal(1),
+  concepts: z.array(DiscoveryTermSchema).max(24),
+  skills: z.array(DiscoveryTermSchema).max(24),
+  topics: z.array(DiscoveryTermSchema).max(16),
+  keywords: z.array(DiscoveryTermSchema).max(32),
+  runtimes: z.array(RuntimeSchema).max(2),
+  format: z.enum(["classic", "progressive", "unknown"]),
+  difficulty: z.enum(["easy", "medium", "hard", "unknown"]),
+  inferred: z.literal(true)
+});
+export type DiscoveryMetadata = z.infer<typeof DiscoveryMetadataSchema>;
 export const ProblemOriginSchema = z.enum(["native", "licensed_import"]);
 export const ProblemVisibilitySchema = z.enum(["private", "unlisted", "public"]);
 export const ProblemStatusSchema = z.enum([
@@ -31,6 +45,19 @@ export const ProvenanceSchema = z.discriminatedUnion("kind", [
     importedBy: z.string().min(1).optional(),
     importedByHandle: z.string().min(1).optional(),
     commitSha: z.string().optional(),
+    sourceSnapshot: z.object({
+      schemaVersion: z.literal(1),
+      commitSha: z.string().regex(/^[0-9a-f]{40}$/),
+      totalBytes: z.number().int().nonnegative().max(524_288),
+      files: z.array(z.object({
+        path: z.string().min(1).max(300),
+        roles: z.array(z.enum(["metadata", "instructions", "solution", "test", "support", "example", "license", "notice"])).min(1),
+        url: z.string().url(),
+        sha256: z.string().regex(/^[0-9a-f]{64}$/),
+        bytes: z.number().int().nonnegative().max(131_072)
+      })).min(1).max(40)
+    }).optional(),
+    legalNotices: z.array(z.object({ path: z.string().min(1).max(300), url: z.string().url(), text: z.string().max(131_072) })).max(40).optional(),
     retrievedAt: z.string().datetime()
   })
 ]);
@@ -64,6 +91,7 @@ export const ProblemDefinitionSchema = z.object({
   executionModel: z.enum(["stdio", "call-sequence"]),
   difficulty: z.enum(["easy", "medium", "hard"]),
   tags: z.array(z.string().min(1)).min(1),
+  metadata: DiscoveryMetadataSchema.optional(),
   stages: z.array(z.object({
     number: z.number().int().positive(),
     statementMd: z.string().min(1),
@@ -162,7 +190,13 @@ export const ExecutionResultSchema = z.object({
   maxScore: z.number().int().nonnegative(),
   durationMs: z.number().int().nonnegative(),
   cases: z.array(z.object({
-    id: z.string(), name: z.string(), stage: z.number().int(), passed: z.boolean(), message: z.string().optional()
+    id: z.string(), name: z.string(), stage: z.number().int(), passed: z.boolean(), message: z.string().optional(),
+    mismatch: z.object({
+      expected: z.json(),
+      actual: z.json(),
+      method: z.string().optional(),
+      input: z.json().optional()
+    }).optional()
   })),
   message: z.string().optional()
 });

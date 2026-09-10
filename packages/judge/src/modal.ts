@@ -1,4 +1,4 @@
-import { ExecutionResultSchema, type ExecutionRequest, type ExecutionResult, type JudgeBundle, type ProblemDefinition } from "@silogium/core";
+import { ExecutionResultSchema, sanitizeExecutionResult, type ExecutionRequest, type ExecutionResult, type JudgeBundle, type ProblemDefinition } from "@silogium/core";
 import type { Judge } from "./types.js";
 
 export class ModalJudgeAdapter implements Judge {
@@ -12,11 +12,11 @@ export class ModalJudgeAdapter implements Judge {
           "content-type": "application/json",
           ...(this.token ? { authorization: `Bearer ${this.token}` } : {})
         },
-        body: JSON.stringify({ problem, bundle, request }),
+        body: JSON.stringify({ problem, bundle: { ...bundle, referenceSolutions: {} }, request }),
         signal: AbortSignal.timeout(35_000)
       });
       if (!response.ok) throw new Error(`Modal respondeu HTTP ${response.status}.`);
-      return ExecutionResultSchema.parse(await response.json());
+      return sanitizeExecutionResult(ExecutionResultSchema.parse(await response.json()), bundle, request.kind);
     } catch (error) {
       return {
         id: crypto.randomUUID(),

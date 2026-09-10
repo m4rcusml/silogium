@@ -1,13 +1,17 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { assertProductionServerConfig } from "../production-config";
 
-let adminClient: SupabaseClient | null | undefined;
+let cached: { url: string; serviceKey: string; client: SupabaseClient } | undefined;
 
 export function createSupabaseAdminClient(): SupabaseClient | null {
-  if (adminClient !== undefined) return adminClient;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) return adminClient = null;
-  return adminClient = createClient(url, serviceKey, {
+  assertProductionServerConfig();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!url || !serviceKey) return null;
+  if (cached?.url === url && cached.serviceKey === serviceKey) return cached.client;
+  const client = createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false }
   });
+  cached = { url, serviceKey, client };
+  return client;
 }

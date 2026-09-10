@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import type { ExecutionRequest, ExecutionResult, JudgeBundle, JudgeCase, ProblemDefinition, RuntimeDefinition } from "@silogium/core";
+import { sanitizeExecutionResult, type ExecutionRequest, type ExecutionResult, type JudgeBundle, type JudgeCase, type ProblemDefinition, type RuntimeDefinition } from "@silogium/core";
 import { scoreOutcomes } from "./scoring.js";
 import type { CaseOutcome, Judge } from "./types.js";
 
@@ -66,27 +66,43 @@ function runProcess(command: string, args: string[], options: { cwd: string; inp
 function typescriptRunner(): string {
   return `
 import { pathToFileURL } from "node:url";
-const [solutionPath, symbol, methodMapRaw, casesRaw] = process.argv.slice(2);
+const [solutionPath, symbol, methodMapRaw, casesRaw, outputLimitRaw] = process.argv.slice(2);
 const module = await import(pathToFileURL(solutionPath).href + "?v=" + Date.now());
 const Constructor = module[symbol];
 if (typeof Constructor !== "function") throw new Error("Símbolo exportado não encontrado: " + symbol);
 const methodMap = JSON.parse(methodMapRaw);
 const cases = JSON.parse(casesRaw);
 const outcomes = [];
+const jsonValue = (value) => { try { return JSON.parse(JSON.stringify(value) ?? '"[undefined]"'); } catch { return String(value); } };
 for (const test of cases) {
+  let mismatch;
   try {
     const instance = new Constructor(...test.constructorArgs);
     for (const call of test.calls) {
       const method = methodMap[call.method] || call.method;
       if (typeof instance[method] !== "function") throw new Error("Método não encontrado: " + method);
+      const input = jsonValue(call.args);
       const actual = await instance[method](...call.args);
       if (JSON.stringify(actual) !== JSON.stringify(call.expected)) {
+        mismatch = { expected: jsonValue(call.expected), actual: jsonValue(actual), method: call.method, input };
         throw new Error(method + ": esperado " + JSON.stringify(call.expected) + ", recebido " + JSON.stringify(actual));
       }
     }
     outcomes.push({ id: test.id, name: test.name, stage: test.stage, passed: true });
   } catch (error) {
-    outcomes.push({ id: test.id, name: test.name, stage: test.stage, passed: false, message: error instanceof Error ? error.message : String(error) });
+    outcomes.push({ id: test.id, name: test.name, stage: test.stage, passed: false, message: error instanceof Error ? error.message : String(error), ...(mismatch ? { mismatch } : {}) });
+  }
+}
+let remaining = Math.max(0, Number(outputLimitRaw) - Buffer.byteLength(JSON.stringify(outcomes.map(({ mismatch, ...outcome }) => outcome))) - 1);
+for (const outcome of outcomes) {
+  const mismatch = outcome.mismatch;
+  delete outcome.mismatch;
+  if (!mismatch) continue;
+  if (mismatch.input !== undefined && Buffer.byteLength(JSON.stringify(mismatch.input)) > 2048) delete mismatch.input;
+  const addedBytes = Buffer.byteLength(JSON.stringify({ ...outcome, mismatch })) - Buffer.byteLength(JSON.stringify(outcome));
+  if (addedBytes <= 4096 && addedBytes <= remaining) {
+    outcome.mismatch = mismatch;
+    remaining -= addedBytes;
   }
 }
 console.log(JSON.stringify(outcomes));
@@ -96,7 +112,7 @@ console.log(JSON.stringify(outcomes));
 function pythonRunner(): string {
   return String.raw`
 import importlib.util, inspect, json, sys
-solution_path, symbol, method_map_raw, cases_raw = sys.argv[1:5]
+solution_path, symbol, method_map_raw, cases_raw, output_limit_raw = sys.argv[1:6]
 spec = importlib.util.spec_from_file_location("silogium_solution", solution_path)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -104,20 +120,40 @@ constructor = getattr(module, symbol)
 method_map = json.loads(method_map_raw)
 cases = json.loads(cases_raw)
 outcomes = []
+def json_value(value):
+    try:
+        return json.loads(json.dumps(value, allow_nan=False))
+    except (TypeError, ValueError):
+        return repr(value)
 for test in cases:
+    mismatch = None
     try:
         instance = constructor(*test.get("constructorArgs", []))
         for call in test["calls"]:
             method_name = method_map.get(call["method"], call["method"])
             method = getattr(instance, method_name)
+            call_input = json_value(call["args"])
             actual = method(*call["args"])
             if inspect.isawaitable(actual):
                 raise RuntimeError("Métodos assíncronos ainda não são suportados no runner Python")
             if actual != call["expected"]:
+                mismatch = {"expected": json_value(call["expected"]), "actual": json_value(actual), "method": call["method"], "input": call_input}
                 raise AssertionError(f"{method_name}: esperado {call['expected']!r}, recebido {actual!r}")
         outcomes.append({"id": test["id"], "name": test["name"], "stage": test["stage"], "passed": True})
     except Exception as error:
-        outcomes.append({"id": test["id"], "name": test["name"], "stage": test["stage"], "passed": False, "message": str(error)})
+        outcomes.append({"id": test["id"], "name": test["name"], "stage": test["stage"], "passed": False, "message": str(error), **({"mismatch": mismatch} if mismatch is not None else {})})
+legacy = [{key: value for key, value in outcome.items() if key != "mismatch"} for outcome in outcomes]
+remaining = max(0, int(output_limit_raw) - len(json.dumps(legacy, ensure_ascii=False).encode("utf-8")) - 1)
+for outcome in outcomes:
+    mismatch = outcome.pop("mismatch", None)
+    if mismatch is None:
+        continue
+    if "input" in mismatch and len(json.dumps(mismatch["input"], ensure_ascii=False).encode("utf-8")) > 2048:
+        del mismatch["input"]
+    added_bytes = len(json.dumps({**outcome, "mismatch": mismatch}, ensure_ascii=False).encode("utf-8")) - len(json.dumps(outcome, ensure_ascii=False).encode("utf-8"))
+    if added_bytes <= 4096 and added_bytes <= remaining:
+        outcome["mismatch"] = mismatch
+        remaining -= added_bytes
 print(json.dumps(outcomes, ensure_ascii=False))
 `;
 }
@@ -169,20 +205,16 @@ export class LocalJudgeAdapter implements Judge {
       const outcomes = problem.executionModel === "stdio"
         ? await this.runStdio(runtime, sourcePath, cases, problem, directory)
         : await this.runCallSequences(runtime, sourcePath, cases, problem, directory);
-      if ("verdict" in outcomes) return { ...outcomes, id: crypto.randomUUID(), durationMs: Date.now() - startedAt };
-      const hiddenIds = new Set(bundle.hiddenCases.map((item) => item.id));
-      const sanitized = request.kind === "submission"
-        ? outcomes.map((item) => hiddenIds.has(item.id) && !item.passed ? { ...item, message: undefined, name: "Teste oculto" } : item)
-        : outcomes;
-      const { score, maxScore } = scoreOutcomes(problem, sanitized);
-      return {
+      if ("verdict" in outcomes) return sanitizeExecutionResult({ ...outcomes, id: crypto.randomUUID(), durationMs: Date.now() - startedAt }, bundle, request.kind);
+      const { score, maxScore } = scoreOutcomes(problem, outcomes);
+      return sanitizeExecutionResult({
         id: crypto.randomUUID(),
-        verdict: sanitized.every((item) => item.passed) ? "accepted" : "wrong_answer",
+        verdict: outcomes.every((item) => item.passed) ? "accepted" : "wrong_answer",
         score,
         maxScore,
         durationMs: Date.now() - startedAt,
-        cases: sanitized
-      };
+        cases: outcomes
+      }, bundle, request.kind);
     } finally {
       const safeDirectory = resolve(directory);
       if (safeDirectory.startsWith(resolve(tmpdir()))) await rm(safeDirectory, { recursive: true, force: true });
@@ -195,7 +227,7 @@ export class LocalJudgeAdapter implements Judge {
     const runnerPath = join(directory, runtime.language === "typescript" ? "runner.mjs" : "runner.py");
     await writeFile(runnerPath, runtime.language === "typescript" ? typescriptRunner() : pythonRunner(), "utf8");
     const [executable, prefix] = runtimeCommand(runtime.language, runnerPath);
-    const args = [...prefix, sourcePath, runtime.entrypoint.symbol, JSON.stringify(runtime.entrypoint.methodMap), JSON.stringify(callCases)];
+    const args = [...prefix, sourcePath, runtime.entrypoint.symbol, JSON.stringify(runtime.entrypoint.methodMap), JSON.stringify(callCases), String(problem.limits.outputBytes)];
     const result = await runProcess(executable, args, {
       cwd: runtime.language === "typescript" ? moduleDirectory : directory,
       timeoutMs: Math.min(30_000, Math.max(problem.limits.timeMs, problem.limits.timeMs * callCases.length)),
@@ -227,7 +259,10 @@ export class LocalJudgeAdapter implements Judge {
         return this.failure(compileError ? "compile_error" : "runtime_error", result.stderr.trim() || "A execução falhou.");
       }
       const passed = normalizeOutput(result.stdout) === normalizeOutput(test.expectedStdout);
-      outcomes.push({ id: test.id, name: test.name, stage: test.stage, passed, message: passed ? undefined : `Esperado ${JSON.stringify(test.expectedStdout)}, recebido ${JSON.stringify(result.stdout)}` });
+      outcomes.push({ id: test.id, name: test.name, stage: test.stage, passed, ...(passed ? {} : {
+        message: `Esperado ${JSON.stringify(test.expectedStdout)}, recebido ${JSON.stringify(result.stdout)}`,
+        mismatch: { expected: test.expectedStdout, actual: result.stdout, input: test.stdin }
+      }) });
     }
     return outcomes;
   }

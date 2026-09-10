@@ -10,6 +10,11 @@ O repositório começou como um simulador de avaliações progressivas e agora �
 
 - catálogo público apenas com questões executáveis no Silogium;
 - interface escura e responsiva, Monaco Editor, painéis redimensionáveis e abas móveis;
+- áreas consolidadas **Praticar** (catálogo e atividade) e **Studio** (pesquisar/criar e minhas questões);
+- Studio com escolhas explicadas, exemplos de pedido, ajuda de formato/acesso e próximos passos para editar, validar e resolver;
+- rascunhos locais por usuário/versão/linguagem, modo foco e requisitos cumulativos por nível;
+- resultados com comparação esperado/recebido, execução de caso individual e testes próprios em JSON;
+- retomada de pedidos do Studio após recarregar a página, sem reenviar a solicitação;
 - assistente com modos separados **Pesquisar** e **Criar**;
 - pesquisa na ordem catálogo → Exercism → web aberta;
 - links sem licença permanecem na conversa e nunca viram páginas do catálogo;
@@ -22,7 +27,18 @@ O repositório começou como um simulador de avaliações progressivas e agora �
 - GitHub OAuth, tokens da CLI, cotas e histórico persistidos no Supabase quando configurado;
 - fallback em memória e judge local para desenvolvimento sem contas externas.
 
-As três questões originais do simulador estão migradas para `ProblemDefinitionV1`. Os antigos “testes ocultos” continuam no Git apenas como fixtures públicas de regressão; testes oficiais novos ficam fora do repositório e são enviados ao schema privado do Supabase.
+### Conclusão funcional — setembro de 2026
+
+- Studio com conversas privadas, refinamento explícito com IA, importações acompanháveis e editor de rascunhos/versionamento/revisão.
+- Validação de fixtures, referência, starter e variantes defeituosas; importações por snapshot de commit com avisos de licença preservados.
+- Histórico completo paginado, recuperação de código/versão e sincronização explícita de rascunhos com detecção de conflito.
+- Favoritos, listas/trilhas privadas, sugestões explicáveis e simulados cronometrados dentro de Praticar.
+- Perfil editável, apresentação pública opt-in, metas semanais e conquistas pessoais condicionadas a evidência oficial; demo não concede conquistas.
+- Dicas, soluções e discussões com spoilers explícitos, moderação, denúncias e proteção contra aprovação de uma revisão obsoleta.
+
+O estado detalhado, testes e limites estão em [docs/platform-completion-plan.md](docs/platform-completion-plan.md). **Ainda não está liberado para deploy público:** faltam integração real com Supabase/OAuth, worker durável, verificação de isolamento do judge remoto e controles operacionais. As migrações 003–009 e respectivos pgTAP foram preparados, não aplicados em um banco nesta etapa. A configuração em memória perde dados no reinício.
+
+O catálogo inicial contém **seis questões: três progressivas e três clássicas**, todas em TypeScript e Python. As três originais do simulador estão preservadas em `ProblemDefinitionV1`. As clássicas são **Pacotes complementares**, **Janelas de manutenção** e **Rotas da estação**. Os testes versionados no Git são públicos; não devem ser tratados como secretos. Testes oficiais privados das progressivas ficam fora do repositório e são enviados ao schema privado do Supabase. Veja [o conteúdo das clássicas](docs/classic-seeds.md).
 
 ## Estrutura
 
@@ -52,7 +68,7 @@ Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Abra `http://localhost:3000`. Sem credenciais externas, a aplicação usa um administrador local de demonstração, um gerador determinístico e o judge local. Isso permite experimentar todo o fluxo sem enviar código ou prompts a terceiros.
+Abra `http://localhost:3000`. O `.env.example` usa o Codex como padrão de desenvolvimento; ele reaproveita o login local do ChatGPT e consome a franquia do seu plano. Use `SILOGIUM_AI_PROVIDER=local` quando quiser o gerador determinístico sem chamadas externas.
 
 Comandos de qualidade:
 
@@ -70,11 +86,44 @@ Para instalar o navegador do Playwright pela primeira vez:
 npx playwright install chromium
 ```
 
-## OpenAI
+Com a aplicação aberta em `localhost:3000`, `node scripts/qa-frontend.mjs` captura os layouts desktop/mobile em `test-results/frontend-qa/`, sem chamadas de IA nem submissões reais. Consulte [o estado da reformulação e seus limites](docs/frontend-ux-handoff.md).
 
-Somente o servidor lê `OPENAI_API_KEY`. O modo **Criar** usa Structured Outputs e não recebe ferramenta de busca; o modo **Pesquisar** usa web search e sempre devolve URLs de origem. Configure:
+`node scripts/check-select-layout.mjs` verifica se as opções dos menus suspensos cabem nos campos em cinco larguras de tela. A interface usa Manrope variável servida localmente; a licença está em `apps/web/public/fonts/manrope-license.txt`.
+
+## IA local com Codex
+
+Instale o Codex CLI, entre com a conta ChatGPT que possui acesso ao Codex e confirme a sessão:
+
+```powershell
+codex login
+codex login status
+```
+
+Configure `apps/web/.env.local`:
 
 ```text
+SILOGIUM_AI_PROVIDER=codex
+CODEX_AUTHORING_MODEL=gpt-5.6-terra
+CODEX_DISCOVERY_MODEL=gpt-5.6-luna
+CODEX_TIMEOUT_MS=600000
+```
+
+O modo **Criar** roda sem pesquisa web, em sandbox somente leitura, e exige uma resposta que obedeça ao JSON Schema da questão. O modo **Pesquisar** habilita web search e mantém resultados sem licença como links externos. A geração acontece em segundo plano, então a requisição web não fica aberta até o modelo terminar.
+
+Para verificar autenticação, schema, solução e testes sem abrir o navegador:
+
+```powershell
+npm run test:codex
+```
+
+Esse uso consome os limites ou créditos incluídos na conta ChatGPT autenticada. Ele é apropriado para desenvolvimento local e ferramentas internas; não exponha a sessão pessoal do Codex em uma implantação pública.
+
+## OpenAI
+
+Para uma implantação compartilhada, defina `SILOGIUM_AI_PROVIDER=openai`. Somente o servidor lê `OPENAI_API_KEY`. O modo **Criar** usa Structured Outputs e não recebe ferramenta de busca; o modo **Pesquisar** usa web search e sempre devolve URLs de origem. Configure:
+
+```text
+SILOGIUM_AI_PROVIDER=openai
 OPENAI_API_KEY=...
 OPENAI_DISCOVERY_MODEL=gpt-5.6-luna
 OPENAI_AUTHORING_MODEL=gpt-5.6-terra
@@ -110,7 +159,7 @@ A migration cria `profiles`, `problems`, `problem_versions`, `problem_sources`, 
 
 ### Catálogo e testes privados
 
-O gerador cria `content/problems/generated-catalog.json`. Depois da migration, carregue as três questões:
+O gerador cria `content/problems/generated-catalog.json`. Depois das migrações, carregue as seis questões do catálogo inicial:
 
 ```powershell
 $env:SILOGIUM_PRIVATE_BUNDLES_DIR="C:\caminho\fora\do\git\silogium-private-bundles"

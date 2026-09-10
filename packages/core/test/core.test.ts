@@ -3,7 +3,7 @@ import { ProblemDefinitionSchema, canReadProblem, checkQuota, problemFingerprint
 
 describe("ProblemDefinitionV1", () => {
   it("valida as questões migradas", () => {
-    expect(seedProblems).toHaveLength(3);
+    expect(seedProblems).toHaveLength(6);
     for (const problem of seedProblems) expect(ProblemDefinitionSchema.parse(problem)).toEqual(problem);
   });
 
@@ -15,7 +15,9 @@ describe("ProblemDefinitionV1", () => {
 
 describe("catálogo e publicação", () => {
   it("lista somente questões públicas", () => {
-    expect(searchCatalog(seedProblems, { runtime: "typescript" })).toHaveLength(3);
+    expect(searchCatalog(seedProblems, { runtime: "typescript" })).toHaveLength(6);
+    expect(searchCatalog(seedProblems, { format: "classic" })).toHaveLength(3);
+    expect(searchCatalog(seedProblems, { format: "progressive" })).toHaveLength(3);
     expect(searchCatalog(seedProblems, { query: "reservas" })[0]?.slug).toBe("reservas-de-coworking");
   });
 

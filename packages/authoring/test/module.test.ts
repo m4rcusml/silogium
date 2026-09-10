@@ -1,18 +1,61 @@
-import { describe, expect, it } from "vitest";
-import { LocalAiAdapter, MemoryAuthoringRepository, ProblemAuthoringModule, StructuralProblemValidator } from "../src/index.js";
+import { describe, expect, it, vi } from "vitest";
+import { LocalAiAdapter, MemoryAuthoringRepository, ProblemAuthoringModule, StructuralProblemValidator, type AiAuthoringAdapter, type ProblemValidator } from "../src/index.js";
 
 const actor = { id: "user-1", handle: "marcus", role: "user" as const };
 const stranger = { id: "user-2", handle: "ana", role: "user" as const };
 const admin = { id: "admin-1", handle: "admin", role: "admin" as const };
 
 describe("ProblemAuthoringModule", () => {
+  it("pede uma revisão automática quando a primeira geração falha no judge", async () => {
+    const local = new LocalAiAdapter();
+    let repairCalls = 0;
+    let validationCalls = 0;
+    const ai: AiAuthoringAdapter = {
+      create: local.create.bind(local),
+      searchWeb: local.searchWeb.bind(local),
+      importLicensed: local.importLicensed.bind(local),
+      repair: async (_input, _actor, previous) => {
+        repairCalls += 1;
+        return previous;
+      }
+    };
+    const validator: ProblemValidator = {
+      validate: async () => {
+        validationCalls += 1;
+        return validationCalls === 1
+          ? { valid: false, checks: [{ name: "referência", passed: false, message: "wrong_answer" }] }
+          : { valid: true, checks: [{ name: "referência", passed: true }] };
+      }
+    };
+    const module = new ProblemAuthoringModule(new MemoryAuthoringRepository(), ai, [], validator);
+    const { jobId } = await module.request({ mode: "create", prompt: "uma questão sobre filas", runtime: "typescript", format: "classic", difficulty: "easy", visibility: "private" }, actor);
+    expect((await module.getJob(jobId, actor))?.status).toBe("needs_confirmation");
+    await module.confirmCreation(jobId, actor);
+    const job = await module.getJob(jobId, actor);
+    expect(repairCalls).toBe(1);
+    expect(validationCalls).toBe(2);
+    if (job?.result?.kind !== "create") throw new Error("Resultado inesperado");
+    expect(job.result.package.problem.status).toBe("validated");
+  });
+
   it("cria e valida um rascunho privado sem pesquisar a web", async () => {
-    const module = new ProblemAuthoringModule(new MemoryAuthoringRepository(), new LocalAiAdapter(), [], new StructuralProblemValidator());
+    const ai = new LocalAiAdapter();
+    const webSearch = vi.spyOn(ai, "searchWeb");
+    const create = vi.spyOn(ai, "create");
+    const module = new ProblemAuthoringModule(new MemoryAuthoringRepository(), ai, [], new StructuralProblemValidator());
     const { jobId } = await module.request({ mode: "create", prompt: "uma questão sobre hash maps", runtime: "typescript", format: "classic", difficulty: "medium", visibility: "private" }, actor);
+    // The initial catalog now contains a classic hash-map exercise. Creation
+    // must wait for the user's choice, without consulting the web or generating.
+    expect((await module.getJob(jobId, actor))?.status).toBe("needs_confirmation");
+    expect(create).not.toHaveBeenCalled();
+    expect(webSearch).not.toHaveBeenCalled();
+    await module.confirmCreation(jobId, actor);
     const job = await module.getJob(jobId, actor);
     expect(job?.status).toBe("completed");
     expect(job?.result?.kind).toBe("create");
     if (job?.result?.kind === "create") expect(job.result.package.problem.status).toBe("validated");
+    expect(create).toHaveBeenCalledOnce();
+    expect(webSearch).not.toHaveBeenCalled();
   });
 
   it("mantém links externos fora do catálogo", async () => {
@@ -67,6 +110,8 @@ describe("ProblemAuthoringModule", () => {
     const input = { mode: "create", prompt: "contagem determinística duplicada", runtime: "typescript", format: "classic", difficulty: "medium", visibility: "private" } as const;
     await module.request(input, actor);
     const second = await module.request(input, actor);
+    expect((await module.getJob(second.jobId, actor))?.status).toBe("needs_confirmation");
+    await module.confirmCreation(second.jobId, actor);
     const job = await module.getJob(second.jobId, actor);
     expect(job?.status).toBe("failed");
     expect(job?.error).toMatch(/duplicada/i);
@@ -76,6 +121,8 @@ describe("ProblemAuthoringModule", () => {
     const repository = new MemoryAuthoringRepository();
     const module = new ProblemAuthoringModule(repository, new LocalAiAdapter(), [], new StructuralProblemValidator());
     const { jobId } = await module.request({ mode: "create", prompt: "fila com prioridades para revisão", runtime: "python", format: "classic", difficulty: "medium", visibility: "public" }, actor);
+    expect((await module.getJob(jobId, actor))?.status).toBe("needs_confirmation");
+    await module.confirmCreation(jobId, actor);
     const job = await module.getJob(jobId, actor);
     if (job?.result?.kind !== "create") throw new Error("Resultado inesperado");
     await expect(repository.moderate(job.result.package.problem.id, "reject", stranger)).rejects.toThrow(/administradores/i);

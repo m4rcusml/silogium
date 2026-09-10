@@ -1,11 +1,12 @@
 import { CatalogExplorer } from "../../components/catalog-explorer";
 import { getAuthoringRepository } from "@/lib/authoring";
+import { getOptionalActor } from "@/lib/actor";
 
-export const metadata = { title: "Explorar questões" };
+export const metadata = { title: "Praticar" };
 
 export const dynamic = "force-dynamic";
 
-export default async function ExplorePage() {
-  const problems = await getAuthoringRepository().listCatalog();
-  return <main className="container page"><span className="eyebrow">Catálogo</span><h1 style={{ fontSize: 46 }}>Encontre uma questão.</h1><p className="lead">Somente questões que podem ser executadas integralmente no Silogium aparecem aqui.</p><CatalogExplorer problems={problems} /></main>;
+export default async function ExplorePage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+  const [problems, { view }, actor] = await Promise.all([getAuthoringRepository().listCatalog(), searchParams, getOptionalActor()]);
+  return <CatalogExplorer problems={problems} actorId={actor?.id ?? "anonymous"} initialView={view === "activity" ? "activity" : "catalog"} />;
 }

@@ -1,7 +1,19 @@
-import { TokenManager } from "@/components/token-manager";
+import Link from "next/link";
+import { ProfileOverview } from "@/components/profile-overview";
+import { getOptionalActor } from "@/lib/actor";
+import "./profile.css";
 
-export const metadata = { title: "Perfil" };
+export const metadata = { title: "Meu perfil" };
 
-export default function ProfilePage() {
-  return <main className="container page"><span className="eyebrow">Conta</span><h1 style={{ fontSize: 46 }}>Perfil e terminal</h1><p className="lead">Gerencie o acesso da CLI sem compartilhar sua sessão do navegador.</p><TokenManager /></main>;
+export default async function ProfilePage() {
+  const actor = await getOptionalActor();
+  if (!actor) return <main className="container page profile-page">
+    <section className="profile-panel profile-signed-out">
+      <span className="eyebrow">Sua conta</span>
+      <h1>Seu espaço de prática</h1>
+      <p>Entre para acompanhar sua atividade e gerenciar o acesso pelo terminal.</p>
+      <Link className="button primary" href="/entrar">Entrar na conta</Link>
+    </section>
+  </main>;
+  return <ProfileOverview actor={actor} />;
 }

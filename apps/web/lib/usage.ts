@@ -1,5 +1,5 @@
 import { checkQuota, type QuotaKind, type UsageEvent } from "@silogium/core";
-import { createSupabaseAdminClient } from "./supabase/admin";
+import { createSupabaseAdminClient } from "./supabase/admin.js";
 
 const globalUsage = globalThis as typeof globalThis & { __silogiumUsage?: Map<string, UsageEvent[]> };
 const usage: Map<string, UsageEvent[]> = globalUsage.__silogiumUsage ??= new Map<string, UsageEvent[]>();
@@ -16,7 +16,7 @@ export async function consumeQuota(actorId: string, kind: QuotaKind) {
   if (!status.allowed) return status;
   events.push({ kind, occurredAt: new Date() });
   usage.set(actorId, events);
-  return checkQuota(kind, events);
+  return { ...status, dailyRemaining: Math.max(0, status.dailyRemaining - 1) };
 }
 
 export async function refundQuota(actorId: string, kind: QuotaKind) {

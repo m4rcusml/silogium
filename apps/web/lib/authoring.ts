@@ -1,7 +1,9 @@
-import { ExercismAdapter, LocalAiAdapter, OpenAiAuthoringAdapter, ProblemAuthoringModule, StructuralProblemValidator, memoryAuthoringRepository, type AuthoringRepository } from "@silogium/authoring";
+import { ExercismAdapter, ProblemAuthoringModule, StructuralProblemValidator, createAiAuthoringAdapterFromEnv, memoryAuthoringRepository, type AuthoringRepository } from "@silogium/authoring";
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { SupabaseAuthoringRepository } from "./supabase/authoring-repository";
 import { createJudgeFromEnv } from "@silogium/judge";
+import { consumeQuota } from "./usage";
+import { getConversationRepository } from "./conversations";
 
 const globalModules = globalThis as typeof globalThis & {
   __silogiumAuthoringModule?: ProblemAuthoringModule;
@@ -9,21 +11,24 @@ const globalModules = globalThis as typeof globalThis & {
 };
 
 export function getAuthoringRepository(): AuthoringRepository {
-  if (globalModules.__silogiumAuthoringRepository) return globalModules.__silogiumAuthoringRepository;
-  return globalModules.__silogiumAuthoringRepository = createSupabaseAdminClient()
-    ? new SupabaseAuthoringRepository()
-    : memoryAuthoringRepository;
+  if (!createSupabaseAdminClient()) return globalModules.__silogiumAuthoringRepository = memoryAuthoringRepository;
+  if (!(globalModules.__silogiumAuthoringRepository instanceof SupabaseAuthoringRepository)) globalModules.__silogiumAuthoringRepository = new SupabaseAuthoringRepository();
+  return globalModules.__silogiumAuthoringRepository;
 }
 
 export function getAuthoringModule(): ProblemAuthoringModule {
-  if (globalModules.__silogiumAuthoringModule) return globalModules.__silogiumAuthoringModule;
-  const ai = process.env.OPENAI_API_KEY
-    ? new OpenAiAuthoringAdapter(process.env.OPENAI_API_KEY, process.env.OPENAI_DISCOVERY_MODEL ?? "gpt-5.6-luna", process.env.OPENAI_AUTHORING_MODEL ?? "gpt-5.6-terra")
-    : new LocalAiAdapter();
+  if (globalModules.__silogiumAuthoringModule instanceof ProblemAuthoringModule) return globalModules.__silogiumAuthoringModule;
+  const ai = createAiAuthoringAdapterFromEnv(process.env);
   return globalModules.__silogiumAuthoringModule = new ProblemAuthoringModule(
     getAuthoringRepository(),
     ai,
     [new ExercismAdapter()],
-    new StructuralProblemValidator(createJudgeFromEnv())
+    new StructuralProblemValidator(createJudgeFromEnv()),
+    true,
+    async (actor) => {
+      const quota = await consumeQuota(actor.id, "ai");
+      if (!quota.allowed) throw new Error("Sua cota diária de IA terminou. Tente novamente amanhã.");
+    },
+    getConversationRepository()
   );
 }

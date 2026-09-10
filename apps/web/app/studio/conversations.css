@@ -1,0 +1,10 @@
+.studio-conversations { display: grid; gap: 1rem; border: 1px solid var(--border, #262b33); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; }
+.studio-conversations p { margin: 0; line-height: 1.65; overflow-wrap: anywhere; }
+.studio-conversations details > summary { cursor: pointer; padding-block: .25rem; }
+.conversation-list { display: grid; gap: .5rem; margin-block: .75rem; }
+.conversation-list > button { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; text-align: left; padding: .75rem 1rem; border: 1px solid var(--border, #262b33); border-radius: 8px; background: transparent; color: inherit; cursor: pointer; }
+.conversation-list > button > span { min-width: 0; overflow-wrap: anywhere; }
+.conversation-list > button[aria-pressed="true"] { border-color: #8b5cf6; }
+.conversation-list time { flex-shrink: 0; font-size: .75rem; color: #9ca3af; }
+.conversation-turns { display: grid; gap: 1rem; max-height: 26rem; overflow: auto; }
+.conversation-turns article { display: grid; justify-items: start; gap: .75rem; padding: 1rem; border: 1px solid var(--border, #262b33); border-radius: 8px; }

@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildClassicSeeds } from "./classic-seeds.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const registry = JSON.parse(readFileSync(join(root, "content", "problems", "registry.json"), "utf8"));
@@ -55,6 +56,11 @@ const problems = registry.map((item) => ({
 }));
 
 const target = join(root, "packages", "core", "src", "generated-catalog.ts");
+const classics = buildClassicSeeds(root);
+problems.push(...classics.map((item) => item.problem));
+for (const { problem, bundle } of classics) {
+  writeFileSync(join(root, "content/judge", `${problem.slug}.visible.json`), JSON.stringify(bundle, null, 2) + "\n", "utf8");
+}
 writeFileSync(target, `// Gerado por npm run content:generate. Não edite manualmente.\nimport type { ProblemDefinition } from "./schemas.js";\n\nexport const seedProblems: ProblemDefinition[] = ${JSON.stringify(problems, null, 2)};\n`, "utf8");
 writeFileSync(join(root, "content", "problems", "generated-catalog.json"), JSON.stringify(problems, null, 2) + "\n", "utf8");
 console.log(`Catálogo gerado: ${problems.length} questões.`);
