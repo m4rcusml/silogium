@@ -52,7 +52,11 @@ print(json.dumps(values, ensure_ascii=False, allow_nan=False))
 def candidate_files(case):
     extension = "ts" if case.runtime == "typescript" else "py"
     files = {f"/work/solution.{extension}": case.source}
-    if case.execution_model == "call-sequence":
+    if case.execution_model == "stdio":
+        # Open stdin before starting the program. A short-lived solution may
+        # already have exited when a subsequent SDK stdin RPC reaches it.
+        files["/work/stdin.txt"] = case.input["stdin"]
+    else:
         # Explicit projection: do not serialize a fixture, payload, or __dict__.
         files["/work/input.json"] = json.dumps({
             "entrypoint": case.entrypoint,

@@ -18,6 +18,8 @@ Agora a interface interna é `CaseExecutor.run(CandidateCase) -> ProcessOutput`.
 
 `stdio` devolve bytes que o controlador compara após normalizar CRLF e espaços finais. `call-sequence` devolve somente uma lista JSON de `{value}` por chamada. Cada retorno é copiado imediatamente, antes de a próxima chamada poder mutá-lo. Objetos JSON são comparados por conteúdo (ordem de chaves irrelevante); arrays mantêm ordem; booleanos não equivalem a números. NaN/Infinity, valores indefinidos, chaves duplicadas e JSON inválido são rejeitados. A implementação local antiga ainda usa sua comparação própria; ela **não é um sandbox seguro** e não deve avaliar código de terceiros em produção.
 
+A entrada `stdio` do caso atual fica em `/work/stdin.txt` e é aberta por redirecionamento antes de iniciar o candidato. Compilação e `call-sequence` usam `/dev/null`. O comando shell contém somente texto fixo e argumentos de execução fixos; não interpola fonte, entrada, métodos ou nomes fornecidos pelo candidato. Isso elimina a corrida observada no primeiro smoke remoto: programas curtos como `print(0)` podiam terminar antes do RPC de envio de stdin/EOF e virar `system_error`. A leitura posterior de stdout/stderr continua limitada; não se ignora uma falha de transporte para fabricar um veredito.
+
 Toda a sequência de chamadas de um caso pertence à mesma instância e pode ser observada pela solução; essa é a unidade de isolamento. Outro caso nunca é colocado nessa sandbox. Não é possível nem necessário provar que a solução usou a classe/wrapper original: produzir valores corretos pelas próprias rotinas equivale funcionalmente a resolvê-lo. Imprimir `passed: true`, IDs ou `score` não tem autoridade e é rejeitado pelo protocolo de valores.
 
 ## Recursos e falhas
@@ -36,7 +38,9 @@ Toda a sequência de chamadas de um caso pertence à mesma instância e pode ser
 
 Os testes Python usam adapter falso e as definições reais do adapter Modal com SDK simulado, sem instalar ou acessar Modal. Cobrem projeção sem respostas/referências/futuros casos, independência de instâncias, opções de recursos/rede/secrets, streaming limitado, cleanup, prazo total, cancelamento, JSON adversarial e pontuação. Os testes Vitest executam wrappers benignos localmente para duas linguagens, incluindo a tentativa de ler o antigo payload, estado compartilhado, snapshots de retorno e stdout forjado; testam também protocolo HTTP v2/inventário adulterado com fetch falso.
 
-Isso **não prova** isolamento de kernel, bloqueio efetivo de rede, OOM real, latência de cold start, custo, limites internos do SDK ou funcionamento de um deploy. Não houve execução Modal nem inspeção de secrets reais.
+Isso **não prova** isolamento de kernel, bloqueio efetivo de rede, OOM real, latência de cold start, custo, limites internos do SDK ou funcionamento de um deploy. Esses testes offline não fazem chamadas ao Modal nem inspecionam secrets reais.
+
+Atualização do smoke autorizado em 10/09/2026: o endpoint foi publicado e houve execução sintética limitada, ainda sem homologação de segurança. TypeScript/stdio correto, Python/call-sequence correto e TypeScript/call-sequence incorreto deram os vereditos esperados. Python `print(0)` reproduziu `system_error`; ler stdin antes de imprimir a mesma resposta mudou o resultado para `wrong_answer`, isolando a corrida acima. A correção foi testada offline e precisa de novo deploy/repetição do smoke original. Rede/OOM/flood, cleanup real, custo e bundles completos continuam não homologados; não habilitar a política oficial apenas com essa evidência.
 
 Além desses testes, o smoke `python -m infra.modal.check_sdk` passou com Modal 1.5.5 e FastAPI 0.139.2 instalados em venv local isolado. As definições e assinaturas carregaram com conexões de rede bloqueadas; nenhuma imagem foi construída, recurso provisionado ou conta acessada.
 

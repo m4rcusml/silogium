@@ -262,6 +262,30 @@ class ModalAdapterTests(unittest.IsolatedAsyncioTestCase):
         fake = types.SimpleNamespace(Sandbox=types.SimpleNamespace(create=AsyncMethod(create)), exception=types.SimpleNamespace(TimeoutError=TimeoutError))
         return adapter_namespace(fake), created
 
+    async def test_short_stdio_process_does_not_depend_on_rpc_stdin_after_exit(self):
+        def already_exited():
+            process = FakeProcess(stdout=(b"0\n",))
+            async def closed_stdin():
+                raise BrokenPipeError("Synthetic process already exited before stdin RPC")
+            process.stdin.drain = AsyncMethod(closed_stdin)
+            return process
+        namespace, created = self.adapter(already_exited)
+        case = CandidateCase("python", "print(0)\n", "stdio", {"kind": "stdio"}, {"stdin": "17 -4\n"}, 2000, 65536, 256)
+        output = await namespace["ModalCaseExecutor"]().run(case)
+        self.assertEqual(output.stdout, b"0\n")
+        self.assertEqual(output.returncode, 0)
+        self.assertEqual(created[0][0].files["/work/stdin.txt"], "17 -4\n")
+        self.assertEqual(created[0][0].commands[1][0], ("sh", "-c", 'exec "$@" < /work/stdin.txt', "silogium-candidate", "python", "-I", "/work/solution.py"))
+        self.assertTrue(created[0][0].terminated and created[0][0].detached)
+
+    async def test_stdio_input_remains_data_not_shell_source(self):
+        namespace, created = self.adapter()
+        injection = '\n"; touch /work/attacker; $(printf injected)\n'
+        case = CandidateCase("typescript", "source", "stdio", {"kind": "stdio"}, {"stdin": injection}, 2000, 65536, 256)
+        await namespace["ModalCaseExecutor"]().run(case)
+        self.assertEqual(created[0][0].files["/work/stdin.txt"], injection)
+        self.assertNotIn(injection, repr(created[0][0].commands))
+
     async def test_new_sandbox_each_case_no_secrets_network_volumes_or_shared_payload(self):
         namespace, created = self.adapter()
         executor = namespace["ModalCaseExecutor"]()
@@ -280,13 +304,15 @@ class ModalAdapterTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(options["include_oidc_identity_token"])
             self.assertNotIn("volumes", options)
             self.assertNotIn("controller", options["image"])
-            self.assertEqual(len(sandbox.files), 1)
+            self.assertEqual(len(sandbox.files), 2)
             self.assertNotIn("payload", " ".join(sandbox.files))
-            self.assertEqual(sandbox.process.input, b"current only")
+            self.assertEqual(sandbox.files["/work/stdin.txt"], "current only")
+            self.assertEqual(sandbox.process.input, b"")
             self.assertTrue(sandbox.terminated and sandbox.detached)
             for _, options in sandbox.commands:
                 self.assertFalse(options["text"])
                 self.assertEqual(options["bufsize"], -1)
+            self.assertEqual(sandbox.commands[0][0][:4], ("sh", "-c", 'exec "$@" < /dev/null', "silogium-compile"))
 
     async def test_output_overflow_terminates_sandbox_without_unbounded_read(self):
         namespace, created = self.adapter(lambda: FakeProcess(stdout=(b"a" * 65536, b"overflow")))
@@ -330,6 +356,7 @@ class ModalAdapterTests(unittest.IsolatedAsyncioTestCase):
         files = created[0][0].files
         self.assertEqual(json.loads(files["/work/input.json"])["entrypoint"]["symbol"], injection)
         self.assertNotIn(injection, files["/work/call_runner.mjs"])
+        self.assertNotIn(injection, repr(created[0][0].commands))
 
 
 if __name__ == "__main__":

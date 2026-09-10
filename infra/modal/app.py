@@ -53,13 +53,9 @@ async def collect_output(process, *, output_bytes, timeout_seconds):
                 raise CandidateFailure("output_limit", "Limite de saída excedido.")
             destination.extend(chunk)
 
-    async def send_eof():
-        process.stdin.write_eof()
-        await process.stdin.drain.aio()
-
     readers = [asyncio.create_task(read(process.stdout, buffers[0])),
                asyncio.create_task(read(process.stderr, buffers[1])),
-               asyncio.create_task(process.wait.aio()), asyncio.create_task(send_eof())]
+               asyncio.create_task(process.wait.aio())]
     try:
         await asyncio.wait_for(asyncio.gather(*readers), timeout=timeout_seconds)
     finally:
@@ -86,11 +82,14 @@ class ModalCaseExecutor:
             for path, content in candidate_files(case).items():
                 await sandbox.filesystem.write_text.aio(content, path)
 
-            # Compilation never receives input (or any expected values). Keep it
+            # Compilation receives EOF on stdin and no expected values. Keep it
             # inside this disposable sandbox, but outside the candidate timer.
             command = (["esbuild", "/work/solution.ts", "--format=esm", "--platform=node", "--target=node22", "--outfile=/work/solution.mjs"]
                        if case.runtime == "typescript" else ["python", "-I", "-m", "py_compile", "/work/solution.py"])
-            compiled = await sandbox.exec.aio(*command, timeout=10, text=False, bufsize=-1)
+            # Fixed shell text only: command/paths are controller literals, never
+            # source or fixture strings. exec replaces the shell (same exit code).
+            compiled = await sandbox.exec.aio("sh", "-c", 'exec "$@" < /dev/null', "silogium-compile", *command,
+                                             timeout=10, text=False, bufsize=-1)
             compilation = await collect_output(compiled, output_bytes=case.output_bytes, timeout_seconds=10)
             if compilation.returncode != 0:
                 raise CandidateFailure("compile_error", "Não foi possível compilar a solução.", compilation.stderr.decode("utf-8", errors="replace"))
@@ -98,11 +97,10 @@ class ModalCaseExecutor:
             extension = "mjs" if case.runtime == "typescript" else "py"
             script = f"/work/{'solution' if case.execution_model == 'stdio' else 'call_runner'}.{extension}"
             command = ["node", script] if case.runtime == "typescript" else ["python", "-I", script]
-            process = await sandbox.exec.aio(*command, timeout=max(1, math.ceil(case.time_ms / 1000)), text=False, bufsize=-1)
+            redirect = 'exec "$@" < /work/stdin.txt' if case.execution_model == "stdio" else 'exec "$@" < /dev/null'
+            process = await sandbox.exec.aio("sh", "-c", redirect, "silogium-candidate", *command,
+                                           timeout=max(1, math.ceil(case.time_ms / 1000)), text=False, bufsize=-1)
             executing_candidate = True
-            if case.execution_model == "stdio":
-                # Only this case's stdin crosses the seam; answers never do.
-                process.stdin.write(case.input["stdin"].encode("utf-8"))
             output = await collect_output(process, output_bytes=case.output_bytes, timeout_seconds=case.time_ms / 1000)
             if output.returncode in (-9, 137):
                 # Unix SIGKILL is compatible with OOM but not proof of its cause.
