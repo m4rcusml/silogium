@@ -7,6 +7,7 @@ import re
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_CEILING
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
@@ -15,6 +16,10 @@ WORKER_DISPATCH_RESERVATION_MICROUSD = 30_000
 
 class WakeUnavailable(Exception):
     """Operational failure with no provider response or credential in its text."""
+
+    def __init__(self, message, *, code="control_unavailable"):
+        super().__init__(message)
+        self.code = code
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -41,7 +46,7 @@ def _rpc(environment: Mapping[str, str], name: str, action: str, payload: dict, 
         if (url.scheme != "https" or not re.fullmatch(r"[a-z0-9]+\.supabase\.co", url.hostname or "")
                 or url.username or url.password or url.port or url.query or url.fragment
                 or url.path not in ("", "/") or not token):
-            raise ValueError("invalid configuration")
+            raise WakeUnavailable("Configuração do banco indisponível.", code="database_configuration")
         request = Request(
             source.rstrip("/") + "/rest/v1/rpc/" + name,
             data=json.dumps({"p_action": action, "p_payload": payload}, separators=(",", ":")).encode(), method="POST",
@@ -50,13 +55,32 @@ def _rpc(environment: Mapping[str, str], name: str, action: str, payload: dict, 
         )
         with (open_request or _open)(request, timeout=5) as response:
             if response.status != 200:
-                raise ValueError("unexpected response")
+                raise WakeUnavailable("Resposta do banco indisponível.", code="database_http")
             raw = response.read(4097)
         if len(raw) > 4096:
             raise ValueError("oversized response")
         return json.loads(raw)
+    except HTTPError as error:
+        # Only this exact SQL refusal is an expected wait. Never forward bodies.
+        code = "database_http"
+        try:
+            raw = error.read(4097)
+            detail = json.loads(raw) if len(raw) <= 4096 else None
+            if (name == "operational_capacity" and action == "observe_modal" and error.code == 400
+                    and isinstance(detail, dict) and detail.get("code") == "P0001"
+                    and detail.get("message") == "unverified billing cycle"):
+                code = "billing_cycle_unverified"
+        except Exception:
+            pass
+        finally:
+            error.close()
+        raise WakeUnavailable("A verificação da fila não está disponível.", code=code) from None
+    except (URLError, OSError, TimeoutError):
+        raise WakeUnavailable("O banco está indisponível. Tente novamente mais tarde.", code="database_transport") from None
+    except WakeUnavailable:
+        raise
     except Exception:
-        raise WakeUnavailable("A verificação da fila não está disponível.") from None
+        raise WakeUnavailable("A verificação da fila não está disponível.", code="database_response") from None
 
 
 def queue_has_ready_work(environment: Mapping[str, str], *, open_request=None) -> bool:
@@ -94,6 +118,11 @@ def observe_modal_capacity(environment: Mapping[str, str], summary, *, open_requ
         # Known provider waits must not boot a worker just to rediscover the
         # pause. Catalog browsing remains independent from authoring dispatch.
         return status["modal"]["available"] and status["groq"]["available"]
+    except WakeUnavailable as error:
+        if error.code == "billing_cycle_unverified":
+            # A month rollover needs operator attestation, never automatic renewal.
+            return False
+        raise
     except Exception:
         raise WakeUnavailable("A capacidade gratuita do Modal não pôde ser verificada.") from None
 

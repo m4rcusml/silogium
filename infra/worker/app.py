@@ -68,12 +68,18 @@ async def _dispatch():
         # access token or guessed balance is embedded in either image.
         expected = os.environ.get("SILOGIUM_MODAL_WORKSPACE", "").strip()
         if not expected:
-            raise WakeUnavailable("Workspace financeiro não configurado.")
-        workspace = modal.Workspace.from_context()
-        await workspace.hydrate.aio()
+            raise WakeUnavailable("Workspace financeiro não configurado.", code="workspace_configuration")
+        try:
+            workspace = modal.Workspace.from_context()
+            await workspace.hydrate.aio()
+        except Exception:
+            raise WakeUnavailable("Leitura financeira indisponível.", code="billing_unavailable") from None
         if workspace.name != expected:
-            raise WakeUnavailable("Workspace financeiro incompatível.")
-        summary = await workspace.billing.summary.aio()
+            raise WakeUnavailable("Workspace financeiro incompatível.", code="workspace_mismatch")
+        try:
+            summary = await workspace.billing.summary.aio()
+        except Exception:
+            raise WakeUnavailable("Leitura financeira indisponível.", code="billing_unavailable") from None
         return await asyncio.to_thread(observe_modal_capacity, os.environ, summary)
 
     # Refresh even when the queue is empty: standalone judge submissions also
@@ -111,7 +117,8 @@ async def wake(request: fastapi.Request):
             raise fastapi.HTTPException(status_code=400, detail="wake requests must be empty")
     try:
         status = await _dispatch()
-    except Exception:
+    except Exception as error:
+        print({"event": "authoring_wake_failed", "code": error.code if isinstance(error, WakeUnavailable) else "control_unavailable"})
         raise fastapi.HTTPException(status_code=503, detail="worker wake unavailable") from None
     return fastapi.responses.JSONResponse({"status": status}, status_code=202)
 
@@ -128,6 +135,7 @@ async def recover_authoring():
     # Empty/paused queues never boot the heavier Node/Groq image.
     try:
         status = await _dispatch()
-    except Exception:
+    except Exception as error:
+        print({"event": "authoring_recovery_failed", "code": error.code if isinstance(error, WakeUnavailable) else "control_unavailable"})
         raise WakeUnavailable("A recuperação do worker não está disponível.") from None
     print({"event": "authoring_recovery", "status": status})

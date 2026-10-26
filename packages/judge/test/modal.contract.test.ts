@@ -119,4 +119,33 @@ describe("contrato do judge remoto v2", () => {
     expect(actual.verdict).toBe("system_error");
     expect(actual.message).toContain("serviço indisponível");
   });
+
+  it("aguarda cold start mais prazo hard do controlador, sem repetir a execução", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const mocked = remote(result());
+    const actual = await new ModalJudgeAdapter("https://judge.invalid", "token").evaluate(problem, bundle, request);
+    expect(timeout).toHaveBeenCalledWith(55_000);
+    expect(mocked).toHaveBeenCalledOnce();
+    expect(mocked.mock.calls[0]![1]!.redirect).toBe("error");
+    expect(actual.verdict).toBe("accepted");
+  });
+
+  it.each(["TimeoutError", "AbortError", "TypeError"])("preserva o código e classifica %s como falha de infraestrutura", async (name) => {
+    const error = name === "TypeError" ? new TypeError("private network details") : new DOMException("private timeout", name);
+    const mocked = vi.spyOn(globalThis, "fetch").mockRejectedValue(error);
+    const actual = await new ModalJudgeAdapter("https://judge.invalid").evaluate(problem, bundle, request);
+    expect(actual).toMatchObject({ verdict: "system_error", score: 0, maxScore: 0, cases: [] });
+    expect(actual.message).toContain("código foi preservado");
+    expect(actual.message).not.toContain("private");
+    expect(mocked).toHaveBeenCalledOnce();
+  });
+
+  it("descarta respostas HTTP de erro sem ler ou expor seu corpo", async () => {
+    const cancel = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(new ReadableStream({ cancel }), { status: 503 }));
+    const actual = await new ModalJudgeAdapter("https://judge.invalid").evaluate(problem, bundle, request);
+    expect(actual.verdict).toBe("system_error");
+    expect(actual.message).toBe("Modal respondeu HTTP 503.");
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 });
