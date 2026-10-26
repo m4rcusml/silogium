@@ -315,12 +315,14 @@ class ModalAdapterTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(sandbox.commands[0][0][:4], ("sh", "-c", 'exec "$@" < /dev/null', "silogium-compile"))
 
     async def test_output_overflow_terminates_sandbox_without_unbounded_read(self):
-        namespace, created = self.adapter(lambda: FakeProcess(stdout=(b"a" * 65536, b"overflow")))
-        case = CandidateCase("python", "source", "stdio", {"kind": "stdio"}, {"stdin": ""}, 2000, 65536, 256)
-        with self.assertRaises(CandidateFailure) as failure:
-            await namespace["ModalCaseExecutor"]().run(case)
-        self.assertEqual(failure.exception.verdict, "output_limit")
-        self.assertTrue(created[0][0].terminated and created[0][0].detached)
+        for streams in ({"stdout": (b"a" * 65536, b"overflow")},
+                        {"stdout": (b"a" * 32768,), "stderr": (b"b" * 32768, b"overflow")}):
+            namespace, created = self.adapter(lambda: FakeProcess(**streams))
+            case = CandidateCase("python", "source", "stdio", {"kind": "stdio"}, {"stdin": ""}, 2000, 65536, 256)
+            with self.assertRaises(CandidateFailure) as failure:
+                await namespace["ModalCaseExecutor"]().run(case)
+            self.assertEqual(failure.exception.verdict, "output_limit")
+            self.assertTrue(created[0][0].terminated and created[0][0].detached)
 
     async def test_candidate_timeout_compile_failure_setup_timeout_and_sigkill_are_separate(self):
         def timed_process():
@@ -336,7 +338,9 @@ class ModalAdapterTests(unittest.IsolatedAsyncioTestCase):
             process.wait = AsyncMethod(wait)
             return process
         variants = [(timed_process, lambda: FakeProcess(stdout=()), "time_limit"),
+                    (lambda: FakeProcess(returncode=-1), lambda: FakeProcess(stdout=()), "time_limit"),
                     (lambda: FakeProcess(), lambda: FakeProcess(returncode=1, stderr=(b"syntax",)), "compile_error"),
+                    (lambda: FakeProcess(), lambda: FakeProcess(returncode=-1), "system_error"),
                     (lambda: FakeProcess(), timeout_during_setup, "system_error"),
                     (lambda: FakeProcess(returncode=137), lambda: FakeProcess(stdout=()), "memory_limit")]
         for make_process, make_compilation, category in variants:
@@ -346,6 +350,27 @@ class ModalAdapterTests(unittest.IsolatedAsyncioTestCase):
                 await namespace["ModalCaseExecutor"]().run(case)
             self.assertEqual(failure.exception.verdict, category)
             self.assertTrue(created[0][0].terminated and created[0][0].detached)
+
+    async def test_infrastructure_failure_logs_phase_without_private_transport_details(self):
+        import io
+        from contextlib import redirect_stdout
+        namespace, created = self.adapter()
+        async def broken_write(*_args):
+            raise RuntimeError("private transport response with credentials")
+        original_create = namespace["modal"].Sandbox.create.aio
+        async def create(*args, **options):
+            sandbox = await original_create(*args, **options)
+            sandbox.filesystem.write_text = AsyncMethod(broken_write)
+            return sandbox
+        namespace["modal"].Sandbox.create = AsyncMethod(create)
+        case = CandidateCase("python", "source", "stdio", {"kind": "stdio"}, {"stdin": ""}, 2000, 65536, 256)
+        output = io.StringIO()
+        with redirect_stdout(output), self.assertRaises(CandidateFailure) as caught:
+            await namespace["ModalCaseExecutor"]().run(case)
+        self.assertEqual(caught.exception.verdict, "system_error")
+        self.assertIn("sandbox_files", output.getvalue())
+        self.assertNotIn("private", output.getvalue() + str(caught.exception))
+        self.assertTrue(created[0][0].terminated and created[0][0].detached)
 
     async def test_input_mapping_strings_stay_json_not_generated_source(self):
         namespace, created = self.adapter(lambda: FakeProcess(stdout=(b"[{\"value\":1}]",)))

@@ -4,6 +4,8 @@ import { scoreOutcomes } from "./scoring.js";
 
 const PROTOCOL_VERSION = 2;
 const RESPONSE_BYTES = 66 * 1024; // bounded controller result plus the v2 envelope
+// Cold start (10s) + controller hard deadline (40s) + transport margin (5s).
+const REQUEST_TIMEOUT_MS = 55_000;
 
 async function readResponse(response: Response): Promise<unknown> {
   if (!response.body) throw new Error("Resposta vazia do judge remoto.");
@@ -49,6 +51,7 @@ export class ModalJudgeAdapter implements Judge {
   constructor(private readonly endpoint: string, private readonly token?: string) {}
 
   async evaluate(problem: ProblemDefinition, bundle: JudgeBundle, request: ExecutionRequest): Promise<ExecutionResult> {
+    const startedAt = Date.now();
     try {
       const requestId = crypto.randomUUID();
       const response = await fetch(this.endpoint, {
@@ -66,9 +69,13 @@ export class ModalJudgeAdapter implements Judge {
           bundle: { problemId: bundle.problemId, problemVersion: bundle.problemVersion,
             visibleCases: bundle.visibleCases, hiddenCases: request.kind === "submission" ? bundle.hiddenCases : [] },
           request }),
-        signal: AbortSignal.timeout(35_000)
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        redirect: "error"
       });
-      if (!response.ok) throw new Error(`Modal respondeu HTTP ${response.status}.`);
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        throw new Error(`Modal respondeu HTTP ${response.status}.`);
+      }
       const envelope = await readResponse(response) as { protocolVersion?: unknown; requestId?: unknown; result?: unknown } | null;
       if (!envelope || envelope.protocolVersion !== PROTOCOL_VERSION || envelope.requestId !== requestId) {
         throw new Error("Protocolo do judge incompatível. Publique o controlador Modal v2 antes de habilitar execuções remotas.");
@@ -82,9 +89,12 @@ export class ModalJudgeAdapter implements Judge {
         verdict: "system_error",
         score: 0,
         maxScore: 0,
-        durationMs: 0,
+        durationMs: Date.now() - startedAt,
         cases: [],
-        message: error instanceof Error ? error.message : "Falha ao acessar o judge remoto."
+        message: error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
+          ? "O judge remoto excedeu o prazo de resposta. Seu código foi preservado; tente novamente."
+          : error instanceof TypeError ? "Não foi possível acessar o judge remoto. Seu código foi preservado; tente novamente."
+          : error instanceof Error ? error.message : "Falha ao acessar o judge remoto."
       };
     }
   }

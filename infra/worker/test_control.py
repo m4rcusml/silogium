@@ -1,8 +1,11 @@
 import unittest
+import io
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
+from urllib.error import HTTPError, URLError
 
 from infra.worker.control import (
     WORKER_DISPATCH_RESERVATION_MICROUSD, WakeUnavailable, authorized_wake, dispatch_if_ready, finish_worker_dispatch,
@@ -143,8 +146,37 @@ class FinancialObservationTests(unittest.TestCase):
     def test_missing_attestation_or_exhausted_capacity_never_allows_dispatch(self):
         opener = Mock(return_value=response(b'{"modal":{"available":false,"reason":"verification_required"},"groq":{"available":true}}'))
         self.assertFalse(observe_modal_capacity(ENVIRONMENT, self.summary(), open_request=opener))
-        with self.assertRaisesRegex(WakeUnavailable, "capacidade gratuita"):
+        with self.assertRaises(WakeUnavailable):
             observe_modal_capacity(ENVIRONMENT, self.summary(), open_request=Mock(side_effect=RuntimeError("private SQL error")))
+
+    def test_month_rollover_waits_without_renewing_attestation_or_starting_work(self):
+        body = json.dumps({"code": "P0001", "message": "unverified billing cycle"}).encode()
+        error = HTTPError("https://offlineproject.supabase.co", 400, "Bad Request", {}, io.BytesIO(body))
+        opener = Mock(side_effect=error)
+        self.assertFalse(observe_modal_capacity(ENVIRONMENT, self.summary(), open_request=opener))
+        self.assertEqual(opener.call_count, 1)
+        self.assertIn(b'"p_action":"observe_modal"', opener.call_args.args[0].data)
+
+    def test_database_outage_and_other_sql_errors_remain_failures_without_private_details(self):
+        errors = [URLError("private host / token"), TimeoutError("private response")]
+        for status, body in ((401, {"code": "P0001", "message": "unverified billing cycle"}),
+                             (400, {"code": "P0001", "message": "private SQL error"}),
+                             (503, {"code": "P0001", "message": "unverified billing cycle"}),
+                             (400, {"code": "OTHER", "message": "unverified billing cycle"})):
+            errors.append(HTTPError("https://offlineproject.supabase.co", status, "private reason", {},
+                                    io.BytesIO(json.dumps(body).encode())))
+        for error in errors:
+            with self.subTest(error=type(error).__name__), self.assertRaises(WakeUnavailable) as caught:
+                observe_modal_capacity(ENVIRONMENT, self.summary(), open_request=Mock(side_effect=error))
+            self.assertIn(caught.exception.code, ("database_transport", "database_http"))
+            self.assertNotIn("private", str(caught.exception))
+
+    def test_unreadable_or_oversized_error_body_never_becomes_an_expected_wait(self):
+        for body in (b"not json", b"x" * 4097, b"null", b"[]"):
+            error = HTTPError("https://offlineproject.supabase.co", 400, "Bad Request", {}, io.BytesIO(body))
+            with self.assertRaises(WakeUnavailable) as caught:
+                observe_modal_capacity(ENVIRONMENT, self.summary(), open_request=Mock(side_effect=error))
+            self.assertEqual(caught.exception.code, "database_http")
 
     def test_invalid_or_unknown_measurement_fails_closed(self):
         for cost in ("NaN", "Infinity", "-1"):

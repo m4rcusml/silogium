@@ -20,7 +20,9 @@ MODAL_JUDGE_TOKEN=um-segredo-longo
 
 O token pertence somente ao controlador. A sandbox não recebe token, OIDC, volume, pacote completo, respostas ou solução de referência. Runtimes, entradas, vereditos e diferenças passam por projeção/validação explícita. O adapter TypeScript rejeita endpoints antigos e respostas com IDs, estágios ou pontuação incoerentes.
 
-Limites: até 128 casos por avaliação, 4 em paralelo, 2 s por caso (ou limite menor da questão), 256 MiB (ou menor), 64 KiB somados de stdout/stderr por processo e 30 s globais de processamento. Preparação/compilação não consome o prazo individual do candidato. O prazo global inclui infraestrutura: quando ele expira, retorna `system_error`, não uma penalização `time_limit`. Cleanup pode usar até mais 3 s; o cliente HTTP aguarda 35 s.
+Limites: até 128 casos por avaliação, 4 em paralelo, 2 s por caso (ou limite menor da questão), 256 MiB (ou menor), 64 KiB somados de stdout/stderr por processo e 30 s globais de processamento. Preparação/compilação não consome o prazo individual do candidato. O prazo global inclui infraestrutura: quando ele expira, retorna `system_error`, não uma penalização `time_limit`. Cleanup pode usar até mais 3 s; o cliente HTTP aguarda 55 s, cobrindo os 10 s de cold start, os 40 s hard do controlador e 5 s de transporte. Falhas de rede não disparam retries automáticos de sandboxes.
+
+O SDK Modal 1.5.5 pode devolver `returncode=-1` ao atingir o prazo do processo: na compilação isso é `system_error`; durante a solução, `time_limit`. Logs de infraestrutura registram somente evento e fase, sem fonte, entradas ou credenciais.
 
 Uma sandbox por caso evita acesso aos próximos casos, mas aumenta custo e cold start. Medir latência com os bundles completos é obrigatório antes do rollout; não relaxar isolamento para caber no prazo. Não reutilizar sandboxes ou snapshots após executar código candidato.
 

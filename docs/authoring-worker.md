@@ -89,6 +89,9 @@ As suítes Python de controller e worker integram o CI e usam apenas doubles loc
 
 ## Compatibilidade e limites conhecidos
 
+- Virada do ciclo financeiro: a recusa exata `P0001 / unverified billing cycle` na observação é uma espera de capacidade, sem renovar atestação, reservar ou iniciar worker. Outras falhas HTTP, DNS, timeout e respostas inválidas continuam indisponibilidade real. Logs registram códigos de diagnóstico (`database_transport`, `database_http`, `billing_unavailable`, `workspace_mismatch`) sem copiar mensagens do fornecedor ou secrets.
+- Se o Supabase gratuito estiver pausado, o operador deve retomar o projeto existente e conferir sua saúde antes do smoke. A retomada não renova a atestação financeira do Modal: conferir os limites nativos do ciclo atual e a disponibilidade da aplicação separadamente.
+
 - Pedidos antigos sem registro em `private.authoring_tasks` não são reexecutados automaticamente: podem já ter criado conteúdo. Conferir `Minhas questões` e histórico antes de refazer; recuperação desses pedidos exige decisão operacional explícita.
 - O endpoint de importação síncrona legado não roda IA em produção: usar `async: true` ou `/api/v1/authoring` com `mode: import`. O Studio já usa jobs.
 - A validação editorial manual (`validateDraft`) continua síncrona; não é um pedido de IA/refinamento. Avaliar seu orçamento de execução antes de liberar esse fluxo em hospedagem.

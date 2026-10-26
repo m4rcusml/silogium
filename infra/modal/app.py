@@ -70,6 +70,7 @@ class ModalCaseExecutor:
     async def run(self, case: CandidateCase) -> ProcessOutput:
         sandbox = None
         executing_candidate = False
+        phase = "sandbox_create"
         try:
             sandbox = await modal.Sandbox.create.aio(
                 "sleep", "30", app=app,
@@ -79,6 +80,7 @@ class ModalCaseExecutor:
                 secrets=[], env={}, include_oidc_identity_token=False,
             )
             # write_text creates parent directories. No candidate has run yet.
+            phase = "sandbox_files"
             for path, content in candidate_files(case).items():
                 await sandbox.filesystem.write_text.aio(content, path)
 
@@ -88,9 +90,13 @@ class ModalCaseExecutor:
                        if case.runtime == "typescript" else ["python", "-I", "-m", "py_compile", "/work/solution.py"])
             # Fixed shell text only: command/paths are controller literals, never
             # source or fixture strings. exec replaces the shell (same exit code).
+            phase = "compilation"
             compiled = await sandbox.exec.aio("sh", "-c", 'exec "$@" < /dev/null', "silogium-compile", *command,
                                              timeout=10, text=False, bufsize=-1)
             compilation = await collect_output(compiled, output_bytes=case.output_bytes, timeout_seconds=10)
+            # Modal 1.5.5 wait() returns -1 when its exec deadline expires.
+            if compilation.returncode == -1:
+                raise TimeoutError
             if compilation.returncode != 0:
                 raise CandidateFailure("compile_error", "Não foi possível compilar a solução.", compilation.stderr.decode("utf-8", errors="replace"))
 
@@ -98,10 +104,14 @@ class ModalCaseExecutor:
             script = f"/work/{'solution' if case.execution_model == 'stdio' else 'call_runner'}.{extension}"
             command = ["node", script] if case.runtime == "typescript" else ["python", "-I", script]
             redirect = 'exec "$@" < /work/stdin.txt' if case.execution_model == "stdio" else 'exec "$@" < /dev/null'
+            phase = "candidate_start"
             process = await sandbox.exec.aio("sh", "-c", redirect, "silogium-candidate", *command,
                                            timeout=max(1, math.ceil(case.time_ms / 1000)), text=False, bufsize=-1)
             executing_candidate = True
+            phase = "candidate_output"
             output = await collect_output(process, output_bytes=case.output_bytes, timeout_seconds=case.time_ms / 1000)
+            if output.returncode == -1:
+                raise TimeoutError
             if output.returncode in (-9, 137):
                 # Unix SIGKILL is compatible with OOM but not proof of its cause.
                 raise CandidateFailure("memory_limit", "Processo encerrado pelo limite de recursos.")
@@ -109,10 +119,12 @@ class ModalCaseExecutor:
         except (TimeoutError, modal.exception.TimeoutError):
             if executing_candidate:
                 raise CandidateFailure("time_limit", "Tempo limite por caso excedido.") from None
+            print({"event": "judge_infrastructure_timeout", "phase": phase})
             raise CandidateFailure("system_error", "O judge excedeu o prazo de preparação da execução.") from None
         except CandidateFailure:
             raise
         except Exception:
+            print({"event": "judge_infrastructure_failure", "phase": phase})
             raise CandidateFailure("system_error", "Falha na infraestrutura do judge.") from None
         finally:
             if sandbox is not None:
